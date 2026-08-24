@@ -14,6 +14,7 @@ _REQUIRED_STRING_FIELDS = (
     "source_type",
     "source_url_or_note",
     "md_line_range",
+    "chunk_text",
 )
 
 
@@ -29,6 +30,11 @@ class ChunkMetadata:
     source_page_range: Optional[str]
     md_line_range: str
     chunk_token_count: int
+    chunk_text: str
+    """The chunk's actual text, persisted alongside its metadata so Phase 2 can
+    embed directly from chunks.jsonl without re-deriving text from
+    md_line_range (which is citation metadata, not meant to be the sole
+    source of truth for chunk content)."""
 
     def validate(self) -> None:
         for field_name in _REQUIRED_STRING_FIELDS:

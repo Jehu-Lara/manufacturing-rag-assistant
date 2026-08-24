@@ -28,6 +28,7 @@ def build_chunks_for_document(document: Document) -> list[ChunkMetadata]:
                 f"{document.body_start_line + raw.end_line - 1}"
             ),
             chunk_token_count=raw.token_count,
+            chunk_text=raw.text,
         )
         chunk.validate()
         chunks.append(chunk)
