@@ -61,20 +61,43 @@ def split_into_sections(body: str) -> list[Section]:
     content_lines: list[str] = []
     content_start_line = 1
 
-    def flush(end_line: int) -> None:
-        text = "\n".join(content_lines).strip("\n")
-        if not text.strip():
+    def flush() -> None:
+        # Trim leading/trailing blank lines, but track exactly how many were
+        # trimmed from the front so start_line stays aligned with the first
+        # REMAINING line — every downstream line-index calculation (sub-split
+        # chunk boundaries, md_line_range) assumes text.split("\n")[0]
+        # corresponds to body line `start_line`. Getting this wrong doesn't
+        # corrupt chunk text (that's always assembled by index, not by
+        # re-slicing the file), but it does corrupt the line-range citation,
+        # which silently points a line or more short of the true content —
+        # for the last chunk of a multi-chunk section, that visibly drops the
+        # final line's citation coverage entirely.
+        start_offset = 0
+        while start_offset < len(content_lines) and not content_lines[start_offset].strip():
+            start_offset += 1
+        end_offset = len(content_lines)
+        while end_offset > start_offset and not content_lines[end_offset - 1].strip():
+            end_offset -= 1
+
+        trimmed_lines = content_lines[start_offset:end_offset]
+        if not trimmed_lines:
             return
+
+        text = "\n".join(trimmed_lines)
         breadcrumb_parts = [title for level, title in heading_stack if level >= 2]
         breadcrumb = " > ".join(breadcrumb_parts) if breadcrumb_parts else (
             heading_stack[-1][1] if heading_stack else "(document body)"
         )
-        sections.append(Section(breadcrumb=breadcrumb, start_line=content_start_line, end_line=end_line, text=text))
+        actual_start_line = content_start_line + start_offset
+        actual_end_line = content_start_line + end_offset - 1
+        sections.append(
+            Section(breadcrumb=breadcrumb, start_line=actual_start_line, end_line=actual_end_line, text=text)
+        )
 
     for line_number, line in enumerate(lines, start=1):
         match = HEADING_PATTERN.match(line)
         if match:
-            flush(line_number - 1)
+            flush()
             level = len(match.group(1))
             title = match.group(2).strip()
             heading_stack = [(lvl, txt) for lvl, txt in heading_stack if lvl < level]
@@ -84,7 +107,7 @@ def split_into_sections(body: str) -> list[Section]:
         else:
             content_lines.append(line)
 
-    flush(len(lines))
+    flush()
     return sections
 
 

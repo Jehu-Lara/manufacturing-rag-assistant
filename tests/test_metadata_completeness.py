@@ -12,6 +12,7 @@ _REQUIRED_STRING_FIELDS = (
     "source_type",
     "source_url_or_note",
     "md_line_range",
+    "chunk_text",
 )
 
 
@@ -21,6 +22,15 @@ def _all_chunks():
     for document in documents:
         chunks.extend(build_chunks_for_document(document))
     return documents, chunks
+
+
+def _all_chunks_with_documents():
+    documents = load_corpus()
+    pairs = []
+    for document in documents:
+        for chunk in build_chunks_for_document(document):
+            pairs.append((document, chunk))
+    return pairs
 
 
 def test_every_chunk_has_complete_required_metadata():
@@ -58,3 +68,26 @@ def test_every_chunk_id_is_unique():
     _, chunks = _all_chunks()
     chunk_ids = [c.chunk_id for c in chunks]
     assert len(chunk_ids) == len(set(chunk_ids))
+
+
+def test_md_line_range_actually_brackets_the_chunk_text_in_the_source_file():
+    # Regression test: an earlier version of the chunker trimmed leading/
+    # trailing blank lines from a section's text without adjusting
+    # start_line/end_line to match, so md_line_range silently pointed short
+    # of the true content — for the last chunk of a multi-chunk section,
+    # that dropped an entire final paragraph's citation coverage (e.g. 29 CFR
+    # 1910.1200(b)'s paragraph (6) was fully present in chunk_text but its
+    # line range stopped one line before it). This checks the file's actual
+    # line at md_line_range's start/end matches chunk_text's first/last line
+    # exactly, for every chunk in the real corpus.
+    for document, chunk in _all_chunks_with_documents():
+        file_lines = document.file_path.read_text(encoding="utf-8").splitlines()
+        start, end = (int(x) for x in chunk.md_line_range.split("-"))
+
+        chunk_lines = chunk.chunk_text.split("\n")
+        assert file_lines[start - 1] == chunk_lines[0], (
+            f"{chunk.chunk_id}: md_line_range start ({start}) doesn't match chunk_text's first line"
+        )
+        assert file_lines[end - 1] == chunk_lines[-1], (
+            f"{chunk.chunk_id}: md_line_range end ({end}) doesn't match chunk_text's last line"
+        )
