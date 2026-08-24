@@ -2,14 +2,14 @@
 
 - Embedding model: `BAAI/bge-m3`
 - Fusion: Reciprocal Rank Fusion (k=60)
-- Git commit: `eab132866efc18bfd40ec6c61309690bbf2d757e`
+- Git commit: `0a56d5fc965338242400cbefcd1feea6a004be90`
 - Eval set SHA-256: verified against stored hash before running
 
 ## Summary Metrics (answerable subset, n=30)
 
 - **Recall@3**: 0.700
 - **Recall@5**: 0.833
-- **MRR**: 0.621
+- **MRR**: 0.637
 
 ### Recall@5 by query language
 
@@ -49,7 +49,7 @@
 | q022 | en | 1.00 | 1.00 | 1.00 |
 | q023 | en | 0.00 | 1.00 | 0.25 |
 | q024 | en | 1.00 | 1.00 | 0.50 |
-| q025 | en | 1.00 | 1.00 | 0.50 |
+| q025 | en | 1.00 | 1.00 | 1.00 |
 | q026 | es | 0.00 | 0.00 | 0.00 |
 | q027 | en | 1.00 | 1.00 | 1.00 |
 | q028 | en | 1.00 | 1.00 | 0.33 |
