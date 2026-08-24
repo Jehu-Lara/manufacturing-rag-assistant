@@ -13,6 +13,9 @@ venv/
 # Ingestion output (generated artifact — regenerate with `python -m ingestion.run`)
 ingestion/output/
 
+# Retrieval index artifacts (generated — regenerate with `python -m retrieval.build_index`)
+retrieval/output/
+
 # Reserved: never commit copyrighted source PDFs. If a future phase adds one,
 # it goes here and its URL only is documented in corpus/SOURCES.md.
 corpus/copyrighted/

@@ -1,3 +1,7 @@
 pyyaml>=6.0
 tiktoken>=0.7
 pytest>=8.0
+sentence-transformers>=3.0
+chromadb>=0.5
+rank-bm25>=0.2
+numpy>=1.26
