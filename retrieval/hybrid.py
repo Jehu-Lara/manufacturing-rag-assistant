@@ -24,6 +24,11 @@ def _rrf_scores(ranked_ids: list[str], k: int = RRF_K) -> dict[str, float]:
     return {chunk_id: 1.0 / (k + rank) for rank, chunk_id in enumerate(ranked_ids, start=1)}
 
 
+def _sort_fused_results(results: list[RetrievalResult]) -> list[RetrievalResult]:
+    results.sort(key=lambda result: (-result.fused_score, result.chunk_id))
+    return results
+
+
 def retrieve(query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[RetrievalResult]:
     semantic_hits = vector_store.query(query_text, top_n)
     bm25_hits = bm25_index.query(query_text, top_n)
@@ -54,5 +59,5 @@ def retrieve(query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[Re
             )
         )
 
-    fused.sort(key=lambda result: result.fused_score, reverse=True)
+    fused = _sort_fused_results(fused)
     return fused[:k]
