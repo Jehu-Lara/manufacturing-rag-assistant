@@ -5,10 +5,16 @@ from pathlib import Path
 
 from eval import hash_eval_set, metrics
 from retrieval.embedder import MODEL_NAME
-from retrieval.hybrid import retrieve
+from retrieval.hybrid import DEFAULT_TOP_N, retrieve
 
 REPORT_DIR = Path(__file__).resolve().parent / "reports"
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# retrieve()'s fused list is bounded by 2 * top_n (worst case: semantic and BM25
+# hit sets don't overlap at all), so requesting this many results guarantees the
+# pure-semantic top-1 item is present in the returned list rather than having
+# already been cut off by a small k — see metrics.top1_semantic_score.
+SEMANTIC_EXTRACTION_K = DEFAULT_TOP_N * 2
 
 
 def _git_commit_hash() -> str:
@@ -19,7 +25,7 @@ def _git_commit_hash() -> str:
 
 
 def _score_answerable(question: dict) -> dict:
-    results = retrieve(question["question"], k=5)
+    results = retrieve(question["question"], k=SEMANTIC_EXTRACTION_K)
     retrieved_ids = [r.chunk_id for r in results]
     return {
         "id": question["id"],
@@ -27,15 +33,20 @@ def _score_answerable(question: dict) -> dict:
         "retrieved": results,
         "recall@3": metrics.recall_at_k(retrieved_ids, question["expected_chunk_ids"], 3),
         "recall@5": metrics.recall_at_k(retrieved_ids, question["expected_chunk_ids"], 5),
-        "rr": metrics.reciprocal_rank(retrieved_ids, question["expected_chunk_ids"]),
+        # Scoped to the original top-5 window (retrieve() used to be called with
+        # k=5 directly) so widening k above to capture the semantic top-1 doesn't
+        # change this metric's historical meaning.
+        "rr": metrics.reciprocal_rank(retrieved_ids[:5], question["expected_chunk_ids"]),
+        "top1_semantic_score": metrics.top1_semantic_score(results),
     }
 
 
 def _score_unanswerable(question: dict) -> dict:
-    results = retrieve(question["question"], k=1)
+    results = retrieve(question["question"], k=SEMANTIC_EXTRACTION_K)
     return {
         "id": question["id"],
         "top1_fused_score": results[0].fused_score if results else 0.0,
+        "top1_semantic_score": metrics.top1_semantic_score(results),
         "retrieved": results,
     }
 
@@ -61,10 +72,15 @@ def build_report(questions: list[dict], answerable_rows: list[dict], unanswerabl
         for lang, rows in sorted(by_language.items())
     ]
 
-    unanswerable_scores = [row["top1_fused_score"] for row in unanswerable_rows]
-    unanswerable_summary = (
-        f"min={min(unanswerable_scores):.4f}, max={max(unanswerable_scores):.4f}, "
-        f"mean={sum(unanswerable_scores) / len(unanswerable_scores):.4f}"
+    unanswerable_fused_scores = [row["top1_fused_score"] for row in unanswerable_rows]
+    unanswerable_fused_summary = (
+        f"min={min(unanswerable_fused_scores):.4f}, max={max(unanswerable_fused_scores):.4f}, "
+        f"mean={sum(unanswerable_fused_scores) / len(unanswerable_fused_scores):.4f}"
+    )
+    unanswerable_semantic_scores = [row["top1_semantic_score"] for row in unanswerable_rows]
+    unanswerable_semantic_summary = (
+        f"min={min(unanswerable_semantic_scores):.4f}, max={max(unanswerable_semantic_scores):.4f}, "
+        f"mean={sum(unanswerable_semantic_scores) / len(unanswerable_semantic_scores):.4f}"
     )
 
     lines = [
@@ -85,25 +101,37 @@ def build_report(questions: list[dict], answerable_rows: list[dict], unanswerabl
         "",
         *language_lines,
         "",
-        "## Unanswerable Subset (n=%d) — Top-1 Fused Score Distribution" % len(unanswerable_rows),
+        "## Unanswerable Subset (n=%d) — Top-1 Score Distribution" % len(unanswerable_rows),
         "",
-        f"- {unanswerable_summary}",
+        f"- Fused score: {unanswerable_fused_summary}",
+        f"- Semantic score (pure cosine similarity, `semantic_rank == 1`): {unanswerable_semantic_summary}",
         (
-            "- No refusal/gating decision is made here — Phase 3 will pick a threshold "
-            "using this score distribution against the answerable subset's scores above."
+            "- No refusal/gating decision is made here — Phase 3 picks a threshold from "
+            "raw semantic_score (see `eval/reports/threshold_analysis_v%s.md`), since fused_score "
+            "is rank-based and disqualified as a refusal-confidence signal — see SPEC.md's "
+            "Phase 2 status." % version
         ),
         "",
         "## Per-Question Results (answerable subset)",
         "",
-        "| id | language | recall@3 | recall@5 | RR |",
-        "|---|---|---|---|---|",
+        "| id | language | recall@3 | recall@5 | RR | top-1 semantic score |",
+        "|---|---|---|---|---|---|",
     ]
     for row in answerable_rows:
-        lines.append(f"| {row['id']} | {row['language']} | {row['recall@3']:.2f} | {row['recall@5']:.2f} | {row['rr']:.2f} |")
+        lines.append(
+            f"| {row['id']} | {row['language']} | {row['recall@3']:.2f} | {row['recall@5']:.2f} | "
+            f"{row['rr']:.2f} | {row['top1_semantic_score']:.4f} |"
+        )
 
-    lines += ["", "## Per-Question Results (unanswerable subset)", "", "| id | top-1 fused score |", "|---|---|"]
+    lines += [
+        "",
+        "## Per-Question Results (unanswerable subset)",
+        "",
+        "| id | top-1 fused score | top-1 semantic score |",
+        "|---|---|---|",
+    ]
     for row in unanswerable_rows:
-        lines.append(f"| {row['id']} | {row['top1_fused_score']:.4f} |")
+        lines.append(f"| {row['id']} | {row['top1_fused_score']:.4f} | {row['top1_semantic_score']:.4f} |")
 
     lines += ["", "## Example Queries", ""]
     examples = answerable_rows[:2] + unanswerable_rows[:1]
