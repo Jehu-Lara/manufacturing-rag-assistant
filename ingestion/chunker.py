@@ -10,6 +10,10 @@ HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(\S.*?)\s*$")
 TARGET_CHUNK_TOKENS = 500
 CHUNK_UPPER_BOUND_TOKENS = 600
 OVERLAP_RATIO = 0.15
+MIN_MERGE_TOKENS = 150
+"""Sections below this size are candidates to merge with a following sibling
+section (same immediate parent heading) rather than standing alone as a
+near-empty chunk. See `_merge_small_sibling_sections`."""
 
 _encoding = None
 
@@ -84,6 +88,77 @@ def split_into_sections(body: str) -> list[Section]:
     return sections
 
 
+def _parent_breadcrumb(breadcrumb: str) -> str:
+    """The breadcrumb one level up, or "" if `breadcrumb` is already top-level.
+
+    Top-level ("") is deliberately never treated as a shared parent by
+    `_merge_small_sibling_sections` — two unrelated top-level sections (e.g.
+    "DC Sources" and "DC Circuit Terminology") happening to both be small
+    doesn't make them siblings worth blending into one citation.
+    """
+    if " > " in breadcrumb:
+        return breadcrumb.rsplit(" > ", 1)[0]
+    return ""
+
+
+def _merge_small_sibling_sections(sections: list[Section]) -> list[Section]:
+    """Combine a run of consecutive, same-parent sections that are individually
+    below MIN_MERGE_TOKENS into one section, growing toward TARGET_CHUNK_TOKENS
+    and never exceeding CHUNK_UPPER_BOUND_TOKENS.
+
+    Without this pass, a document with many short sibling sections (a CFR
+    subpart full of one-sentence provisions, a glossary-style block of short
+    subsections) produces a long tail of chunks too small to carry useful
+    embedding signal in Phase 2. Merging preserves per-provision citability by
+    listing every merged leaf title in the combined breadcrumb, rather than
+    collapsing to just the shared parent's name.
+    """
+    merged: list[Section] = []
+    i = 0
+    n = len(sections)
+
+    while i < n:
+        current = sections[i]
+        current_tokens = count_tokens(current.text)
+        parent = _parent_breadcrumb(current.breadcrumb)
+
+        if current_tokens >= MIN_MERGE_TOKENS or not parent:
+            merged.append(current)
+            i += 1
+            continue
+
+        group = [current]
+        group_tokens = current_tokens
+        j = i + 1
+        while j < n and _parent_breadcrumb(sections[j].breadcrumb) == parent:
+            candidate_tokens = count_tokens(sections[j].text)
+            if group_tokens + candidate_tokens > CHUNK_UPPER_BOUND_TOKENS:
+                break
+            group.append(sections[j])
+            group_tokens += candidate_tokens
+            j += 1
+            if group_tokens >= TARGET_CHUNK_TOKENS:
+                break
+
+        if len(group) == 1:
+            merged.append(current)
+            i += 1
+            continue
+
+        leaf_titles = [s.breadcrumb.rsplit(" > ", 1)[-1] for s in group]
+        merged.append(
+            Section(
+                breadcrumb=f"{parent} > {'; '.join(leaf_titles)}",
+                start_line=group[0].start_line,
+                end_line=group[-1].end_line,
+                text="\n\n".join(s.text for s in group),
+            )
+        )
+        i = j
+
+    return merged
+
+
 def _split_section(section: Section) -> list[RawChunk]:
     lines = section.text.split("\n")
     line_token_counts = [count_tokens(line) for line in lines]
@@ -141,7 +216,8 @@ def _split_section(section: Section) -> list[RawChunk]:
 
 
 def chunk_document(body: str) -> list[RawChunk]:
+    sections = _merge_small_sibling_sections(split_into_sections(body))
     chunks: list[RawChunk] = []
-    for section in split_into_sections(body):
+    for section in sections:
         chunks.extend(_split_section(section))
     return chunks
