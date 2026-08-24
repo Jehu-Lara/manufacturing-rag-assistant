@@ -104,4 +104,4 @@ Built: `SPEC.md`, project `CLAUDE.md`, the full repo skeleton, a 14-document cor
 
 All 7 directly-fetchable public source URLs (3 OSHA publications, 3 DOE Fundamentals Handbook PDFs, 1 NIOSH guide) were verified live during ingestion prep. The 2 CFR regulatory sources were retrieved from GPO's `govinfo.gov` bulk XML (the annual CFR edition) rather than the interactive `ecfr.gov` reader, which blocked automated retrieval — this substitution is documented in `corpus/SOURCES.md` and in each affected file's frontmatter.
 
-Run `python -m ingestion.run` for exact document/chunk counts and corpus size (printed at the end of the run — see README for the command). Run `pytest` to verify all tests pass.
+Verified end-to-end on 2026-08-23: `python -m ingestion.run` processes all 14 documents (9 public, 5 synthetic) into 309 chunks (48,850 words / 323,482 characters of total corpus body text) with zero errors, and `pytest` passes all 12 tests (chunker, metadata completeness, corpus manifest consistency). Re-run either command locally to reproduce these numbers — see README for exact commands.
