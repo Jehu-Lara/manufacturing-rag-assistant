@@ -46,6 +46,7 @@ UI_LABELS: dict[str, dict[str, str]] = {
         "try_example_heading": "Try an example",
         "try_example_answerable_button": "Try an answerable question",
         "try_example_unanswerable_button": "Try an unanswerable question",
+        "backend_unreachable_label": "Could not reach the backend",
     },
     "es": {
         "title": "Asistente de Conocimiento de Manufactura",
@@ -65,5 +66,6 @@ UI_LABELS: dict[str, dict[str, str]] = {
         "try_example_heading": "Probar un ejemplo",
         "try_example_answerable_button": "Probar una pregunta respondible",
         "try_example_unanswerable_button": "Probar una pregunta no respondible",
+        "backend_unreachable_label": "No se pudo contactar al servidor",
     },
 }

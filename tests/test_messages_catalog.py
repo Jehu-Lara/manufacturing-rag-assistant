@@ -20,6 +20,7 @@ _REQUIRED_UI_LABEL_KEYS = (
     "try_example_heading",
     "try_example_answerable_button",
     "try_example_unanswerable_button",
+    "backend_unreachable_label",
 )
 
 

@@ -79,10 +79,7 @@ def _fill_and_submit_example(question_text: str) -> None:
 
 def _render_result(labels: dict[str, str], lang: str) -> None:
     if st.session_state["last_error"] is not None:
-        st.error(
-            f"{'Could not reach the backend' if lang == 'en' else 'No se pudo contactar al servidor'}: "
-            f"{st.session_state['last_error']}"
-        )
+        st.error(f"{labels['backend_unreachable_label']}: {st.session_state['last_error']}")
         return
 
     response_json = st.session_state["last_response"]
