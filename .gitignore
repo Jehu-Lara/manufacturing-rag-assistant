@@ -1,0 +1,22 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Ingestion output (generated artifact — regenerate with `python -m ingestion.run`)
+ingestion/output/
+
+# Reserved: never commit copyrighted source PDFs. If a future phase adds one,
+# it goes here and its URL only is documented in corpus/SOURCES.md.
+corpus/copyrighted/
+
+# OS
+.DS_Store
+Thumbs.db
