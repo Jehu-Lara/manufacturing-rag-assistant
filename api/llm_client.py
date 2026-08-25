@@ -13,10 +13,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Groq free-tier chat model with tool/JSON-schema support. Picked because it's
-# currently available on Groq's free tier and is the largest Llama 3.3
-# variant they serve — no prior model pin exists in this repo to follow.
-GROQ_MODEL = "llama-3.3-70b-versatile"
+# Groq free-tier chat model with tool/JSON-schema support. The original pick
+# (llama-3.3-70b-versatile) was retired by Groq and started 404ing on every
+# call — confirmed live against GET https://api.groq.com/openai/v1/models on
+# 2026-08-25, and against a real generate_structured() call with the JSON
+# schema response_format, both succeeding. Model availability on a free-
+# tier provider can change without notice; re-verify this the same way if a
+# live run ever starts failing with "model ... does not exist" again.
+GROQ_MODEL = "openai/gpt-oss-120b"
 
 # response_format={"type": "json_schema", ...} is confirmed supported for
 # this exact model per the task brief; no json_object fallback needed here.
