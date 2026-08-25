@@ -33,6 +33,43 @@ def test_json_formatter_emits_expected_keys_and_extra_fields() -> None:
     assert payload["latency_ms"] == 42
 
 
+def test_json_formatter_includes_traceback_when_exc_info_present() -> None:
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(JsonFormatter())
+
+    logger = logging.getLogger("test_logging_setup.exc_info")
+    logger.setLevel("ERROR")
+    logger.handlers = [handler]
+    logger.propagate = False
+
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        logger.error("unhandled exception", exc_info=True)
+
+    payload = json.loads(stream.getvalue().strip())
+    assert payload["level"] == "ERROR"
+    assert "ValueError: boom" in payload["exception"]
+    assert "Traceback" in payload["exception"]
+
+
+def test_json_formatter_omits_exception_key_when_no_exc_info() -> None:
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(JsonFormatter())
+
+    logger = logging.getLogger("test_logging_setup.no_exc_info")
+    logger.setLevel("INFO")
+    logger.handlers = [handler]
+    logger.propagate = False
+
+    logger.info("query received")
+
+    payload = json.loads(stream.getvalue().strip())
+    assert "exception" not in payload
+
+
 def test_json_formatter_output_is_single_line_json() -> None:
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)

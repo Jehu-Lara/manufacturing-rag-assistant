@@ -22,6 +22,8 @@ pip install -r requirements.txt
 python -m ingestion.run
 ```
 
+`requirements.txt` pins floors (`>=`), not exact versions — deliberate, see the comment in that file. For a reproducible install matching a known-good, fully-tested dependency tree, use `requirements-lock.txt` instead (`pip install -r requirements-lock.txt`); regenerate it with `pip freeze > requirements-lock.txt` after any `requirements.txt` change.
+
 The first run needs network access once, to let `tiktoken` download and cache its `cl100k_base` encoding file; subsequent runs work offline. If that download fails with no network available, `python -m ingestion.run` will raise a clear error saying so rather than an opaque one.
 
 Expected output:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import traceback
 from datetime import datetime, timezone
 
 _RESERVED_LOG_RECORD_ATTRS = frozenset(
@@ -21,6 +22,8 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "message": record.getMessage(),
         }
+        if record.exc_info:
+            payload["exception"] = "".join(traceback.format_exception(*record.exc_info))
         for key, value in record.__dict__.items():
             if key not in _RESERVED_LOG_RECORD_ATTRS:
                 payload[key] = value

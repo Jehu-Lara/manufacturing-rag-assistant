@@ -117,6 +117,52 @@ def test_query_invalid_language_returns_422(mock_answer_question):
 
 
 @patch("api.generation.answer_question")
+def test_query_oversized_question_returns_422(mock_answer_question):
+    with _client() as client:
+        response = client.post("/query", json={"question": "a" * 2001, "language": "en"})
+
+    assert response.status_code == 422
+    mock_answer_question.assert_not_called()
+
+
+@patch("api.main.load_settings")
+@patch("api.generation.answer_question")
+def test_query_exceeding_rate_limit_returns_429(mock_answer_question, mock_load_settings):
+    mock_load_settings.return_value = Settings(
+        groq_api_key="fake-key",
+        openai_api_key=None,
+        llm_provider="groq",
+        refusal_cosine_threshold=0.3,
+        log_level="INFO",
+        rate_limit_per_minute=2,
+    )
+    mock_answer_question.return_value = _answerable_response()
+
+    with _client() as client:
+        payload = {"question": "What is the QC unit responsible for?", "language": "en"}
+        first = client.post("/query", json=payload)
+        second = client.post("/query", json=payload)
+        third = client.post("/query", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 429
+
+
+@patch("api.generation.answer_question")
+def test_query_unhandled_exception_returns_500_with_generic_body(mock_answer_question):
+    mock_answer_question.side_effect = RuntimeError("index not built")
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/query", json={"question": "What is the QC unit responsible for?", "language": "en"}
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"status": "error", "detail": "internal server error"}
+
+
+@patch("api.generation.answer_question")
 def test_query_calls_answer_question_with_request_body_values(mock_answer_question):
     mock_answer_question.return_value = _answerable_response()
 
