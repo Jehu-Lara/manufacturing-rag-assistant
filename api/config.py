@@ -9,9 +9,13 @@ from dotenv import load_dotenv
 
 LlmProvider = Literal["groq", "openai"]
 
-_DEFAULT_REFUSAL_COSINE_THRESHOLD = 0.5599
+# Overridden from the threshold_analysis.py-selected 0.5599 — see SPEC.md's
+# Phase 3 status note for why (Step 2's tie-break objective and Step 6's
+# acceptance targets disagreed; 0.5999 is closer to both downstream targets).
+_DEFAULT_REFUSAL_COSINE_THRESHOLD = 0.5999
 _DEFAULT_LLM_PROVIDER: LlmProvider = "groq"
 _DEFAULT_LOG_LEVEL = "INFO"
+_DEFAULT_RATE_LIMIT_PER_MINUTE = 20
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,7 @@ class Settings:
     llm_provider: LlmProvider
     refusal_cosine_threshold: float
     log_level: str
+    rate_limit_per_minute: int = _DEFAULT_RATE_LIMIT_PER_MINUTE
 
 
 def load_settings() -> Settings:
@@ -51,10 +56,22 @@ def load_settings() -> Settings:
 
     log_level = os.environ.get("LOG_LEVEL", _DEFAULT_LOG_LEVEL)
 
+    rate_limit_raw = os.environ.get("RATE_LIMIT_PER_MINUTE")
+    if rate_limit_raw is None:
+        rate_limit_per_minute = _DEFAULT_RATE_LIMIT_PER_MINUTE
+    else:
+        try:
+            rate_limit_per_minute = int(rate_limit_raw)
+        except ValueError as exc:
+            raise ValueError(
+                f"RATE_LIMIT_PER_MINUTE must be an int, got {rate_limit_raw!r}"
+            ) from exc
+
     return Settings(
         groq_api_key=groq_api_key,
         openai_api_key=openai_api_key,
         llm_provider=llm_provider,
         refusal_cosine_threshold=refusal_cosine_threshold,
         log_level=log_level,
+        rate_limit_per_minute=rate_limit_per_minute,
     )

@@ -94,6 +94,6 @@ def test_is_confident_for_results_end_to_end_false_case():
 def test_settings_default_refusal_threshold_loads_and_gates_correctly(monkeypatch):
     monkeypatch.delenv("REFUSAL_COSINE_THRESHOLD", raising=False)
     settings = load_settings()
-    assert settings.refusal_cosine_threshold == 0.5599
+    assert settings.refusal_cosine_threshold == 0.5999
     assert is_confident(0.6, settings.refusal_cosine_threshold) is True
     assert is_confident(0.5, settings.refusal_cosine_threshold) is False
