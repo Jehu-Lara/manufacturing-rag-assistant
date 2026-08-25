@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import math
 import statistics
+import sys
 import time
 from pathlib import Path
 
@@ -64,19 +65,12 @@ def _p90(latencies_ms: list[float]) -> float:
     return ordered[index]
 
 
-def _build_row(question: dict) -> dict:
-    time.sleep(INTER_QUESTION_DELAY_SECONDS)
-
-    start_time = time.monotonic()
-    response = api.generation.answer_question(question["question"], question["language"])
-    latency_ms = (time.monotonic() - start_time) * 1000
-
-    retrieval_succeeded = None
-    if question["answerable"]:
-        retrieved = retrieval.hybrid.retrieve(question["question"], k=5)
-        retrieved_chunk_ids = [result.chunk_id for result in retrieved]
-        retrieval_succeeded = metrics.recall_at_k(retrieved_chunk_ids, question["expected_chunk_ids"], 5) > 0
-
+def _error_row(question: dict, latency_ms: float, error: Exception) -> dict:
+    """A single failing question (e.g. a transient network error) must not abort the
+    whole ~13-minute, 40-question sequential run and discard every row already
+    collected — record the failure as a row instead of letting it propagate. This is a
+    safety net, not a retry: retries for real LLM-call failures already live in
+    api/llm_client.py."""
     return {
         "id": question["id"],
         "language": question["language"],
@@ -85,15 +79,58 @@ def _build_row(question: dict) -> dict:
         "expected_answer": question["expected_answer"],
         "expected_document_id": question["expected_document_id"],
         "expected_section_heading": question["expected_section_heading"],
-        "refused": response.refused,
-        "status": response.status,
-        "confidence": response.confidence,
-        "threshold": response.threshold,
-        "retrieval_succeeded": retrieval_succeeded,
-        "answer": response.answer,
-        "citations": response.citations,
+        "refused": False,
+        "status": "error",
+        "confidence": None,
+        "threshold": None,
+        "retrieval_succeeded": None,
+        "answer": "",
+        "citations": [],
         "latency_ms": latency_ms,
+        "error": str(error),
     }
+
+
+def _build_row(question: dict) -> dict:
+    time.sleep(INTER_QUESTION_DELAY_SECONDS)
+
+    start_time = time.monotonic()
+    try:
+        response = api.generation.answer_question(question["question"], question["language"])
+        latency_ms = (time.monotonic() - start_time) * 1000
+
+        retrieval_succeeded = None
+        if question["answerable"]:
+            retrieved = retrieval.hybrid.retrieve(question["question"], k=5)
+            retrieved_chunk_ids = [result.chunk_id for result in retrieved]
+            retrieval_succeeded = metrics.recall_at_k(retrieved_chunk_ids, question["expected_chunk_ids"], 5) > 0
+
+        return {
+            "id": question["id"],
+            "language": question["language"],
+            "answerable": question["answerable"],
+            "question": question["question"],
+            "expected_answer": question["expected_answer"],
+            "expected_document_id": question["expected_document_id"],
+            "expected_section_heading": question["expected_section_heading"],
+            "refused": response.refused,
+            "status": response.status,
+            "confidence": response.confidence,
+            "threshold": response.threshold,
+            "retrieval_succeeded": retrieval_succeeded,
+            "answer": response.answer,
+            "citations": response.citations,
+            "latency_ms": latency_ms,
+            "error": None,
+        }
+    except Exception as exc:
+        latency_ms = (time.monotonic() - start_time) * 1000
+        print(
+            f"WARNING: question {question['id']!r} failed with {type(exc).__name__}: {exc}; "
+            "recording an error row and continuing with the rest of the run",
+            file=sys.stderr,
+        )
+        return _error_row(question, latency_ms, exc)
 
 
 def build_report(rows: list[dict], version: str) -> str:
@@ -121,10 +158,11 @@ def build_report(rows: list[dict], version: str) -> str:
     ]
     for row in rows:
         confidence = "n/a" if row["confidence"] is None else f"{row['confidence']:.4f}"
+        threshold = "n/a" if row["threshold"] is None else f"{row['threshold']:.4f}"
         retrieval_cell = "n/a" if row["retrieval_succeeded"] is None else str(row["retrieval_succeeded"])
         lines.append(
             f"| {row['id']} | {row['language']} | {row['answerable']} | {row['refused']} | "
-            f"{row['status']} | {confidence} | {row['threshold']:.4f} | {retrieval_cell} |"
+            f"{row['status']} | {confidence} | {threshold} | {retrieval_cell} |"
         )
 
     lines += [

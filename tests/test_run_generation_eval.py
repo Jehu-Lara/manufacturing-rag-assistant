@@ -266,3 +266,56 @@ def test_run_writes_report_and_csv_with_expected_metrics(mock_answer_question, m
     row_two = next(row for row in rows if row["id"] == "fq002")
     assert row_two["retrieval_succeeded"] == "False"
     assert row_two["cited_document_ids"] == ""
+
+
+def _answer_question_side_effect_with_failure(question: str, language: str):
+    if question == "answerable question one":
+        raise RuntimeError("simulated transient network error")
+    return _answer_question_side_effect(question, language)
+
+
+def _retrieve_side_effect_skips_failed_question(query_text: str, k: int = 5):
+    if query_text == "answerable question two, falsely refused":
+        return [_fake_retrieval_result("doc-b::chunk-9999")]
+    raise AssertionError(
+        f"retrieve() should only be called for the surviving answerable question, got: {query_text!r}"
+    )
+
+
+@patch("time.sleep")
+@patch("retrieval.hybrid.retrieve")
+@patch("api.generation.answer_question")
+def test_run_continues_after_one_question_raises_and_records_error_row(
+    mock_answer_question, mock_retrieve, mock_sleep, tmp_path
+):
+    eval_set_path = tmp_path / "fake_eval_set.json"
+    _write_fake_eval_set(eval_set_path)
+    report_dir = tmp_path / "reports"
+
+    mock_answer_question.side_effect = _answer_question_side_effect_with_failure
+    mock_retrieve.side_effect = _retrieve_side_effect_skips_failed_question
+
+    report_path, csv_path = run(eval_set_path=eval_set_path, report_dir=report_dir)
+
+    assert mock_answer_question.call_count == 4
+    assert report_path.exists()
+    assert csv_path.exists()
+
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "| fq001 | en | True | False | error | n/a | n/a | n/a |" in report_text
+    assert "fq002" in report_text
+    assert "fq003" in report_text
+    assert "fq004" in report_text
+
+    with csv_path.open("r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    assert len(rows) == 2
+    ids = {row["id"] for row in rows}
+    assert ids == {"fq001", "fq002"}
+
+    error_row = next(row for row in rows if row["id"] == "fq001")
+    assert error_row["generated_answer"] == ""
+    assert error_row["cited_document_ids"] == ""
+    assert error_row["retrieval_succeeded"] == ""
