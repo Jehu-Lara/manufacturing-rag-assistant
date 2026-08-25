@@ -7,7 +7,8 @@ from api.config import Settings
 from api.generation import answer_question
 from api.llm_client import GenerationError
 from api.messages import GENERATION_ERROR_MESSAGE, REFUSAL_MESSAGE
-from retrieval.hybrid import RetrievalResult
+from api.schemas import Citation
+from retrieval.hybrid import SEMANTIC_EXTRACTION_K, RetrievalResult
 
 THRESHOLD = 0.5599
 
@@ -47,6 +48,10 @@ def _below_threshold_results() -> list[RetrievalResult]:
 
 def _confident_results() -> list[RetrievalResult]:
     return [_result("chunk-1", 1, THRESHOLD + 0.2), _result("chunk-2", 2, THRESHOLD + 0.1)]
+
+
+def _many_confident_results(n: int) -> list[RetrievalResult]:
+    return [_result(f"chunk-{i}", i, THRESHOLD + 0.3 - i * 0.001) for i in range(1, n + 1)]
 
 
 @patch("api.llm_client.generate_structured")
@@ -180,3 +185,82 @@ def test_request_id_present_and_looks_like_a_uuid(mock_retrieve, mock_generate):
     response = answer_question("What is the SOP?", "en", settings=_settings())
 
     assert uuid.UUID(response.request_id)
+
+
+@patch("api.generation._resolve_citations")
+@patch("api.prompts.build_user_prompt")
+@patch("api.llm_client.generate_structured")
+@patch("retrieval.hybrid.retrieve")
+def test_retrieve_called_with_wide_k_but_only_top_5_passed_downstream(
+    mock_retrieve, mock_generate, mock_build_user_prompt, mock_resolve_citations
+):
+    results = _many_confident_results(8)
+    mock_retrieve.return_value = results
+    mock_build_user_prompt.return_value = "a built prompt"
+    mock_generate.return_value = {
+        "answer": "An answer.",
+        "citations": [{"chunk_id": "chunk-1"}],
+        "refused": False,
+    }
+    mock_resolve_citations.return_value = [
+        Citation(
+            document_id="doc-chunk-1",
+            document_title="Title chunk-1",
+            section_heading="Section chunk-1",
+            revision="Rev A",
+            chunk_id="chunk-1",
+        )
+    ]
+
+    answer_question("What is the SOP?", "en", settings=_settings())
+
+    mock_retrieve.assert_called_once_with("What is the SOP?", k=SEMANTIC_EXTRACTION_K)
+
+    prompt_call = mock_build_user_prompt.call_args
+    assert prompt_call.args[0] == "What is the SOP?"
+    assert prompt_call.args[1] == results[:5]
+    assert len(prompt_call.args[1]) == 5
+
+    resolve_call = mock_resolve_citations.call_args
+    assert resolve_call.args[1] == results[:5]
+    assert len(resolve_call.args[1]) == 5
+
+
+@patch("api.llm_client.generate_structured")
+@patch("retrieval.hybrid.retrieve")
+def test_confident_non_refused_answer_with_empty_citations_downgrades_to_refusal(mock_retrieve, mock_generate):
+    results = _confident_results()
+    mock_retrieve.return_value = results
+    mock_generate.return_value = {
+        "answer": "An answer with no citations at all.",
+        "citations": [],
+        "refused": False,
+    }
+
+    response = answer_question("What is the QC unit responsible for?", "en", settings=_settings())
+
+    assert response.refused is True
+    assert response.status == "ok"
+    assert response.answer == REFUSAL_MESSAGE["en"]
+    assert response.citations == []
+
+
+@patch("api.llm_client.generate_structured")
+@patch("retrieval.hybrid.retrieve")
+def test_confident_non_refused_answer_with_only_unmatched_citations_downgrades_to_refusal(
+    mock_retrieve, mock_generate
+):
+    results = _confident_results()
+    mock_retrieve.return_value = results
+    mock_generate.return_value = {
+        "answer": "An answer citing a chunk that was never retrieved.",
+        "citations": [{"chunk_id": "chunk-not-in-retrieved-set"}],
+        "refused": False,
+    }
+
+    response = answer_question("What is the QC unit responsible for?", "en", settings=_settings())
+
+    assert response.refused is True
+    assert response.status == "ok"
+    assert response.answer == REFUSAL_MESSAGE["en"]
+    assert response.citations == []

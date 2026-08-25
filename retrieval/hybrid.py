@@ -8,6 +8,13 @@ from retrieval import bm25_index, vector_store
 RRF_K = 60
 DEFAULT_TOP_N = 20
 
+# retrieve()'s fused list is bounded by 2 * top_n (worst case: semantic and
+# BM25 hit sets don't overlap at all), so requesting this many results
+# guarantees the pure-semantic top-1 item (semantic_rank == 1) is present in
+# the returned list rather than having already been cut off by a small k —
+# see eval.metrics.top1_semantic_score / api.refusal.top1_semantic_score_from_results.
+SEMANTIC_EXTRACTION_K = DEFAULT_TOP_N * 2
+
 
 @dataclass(frozen=True)
 class RetrievalResult:

@@ -12,8 +12,11 @@ import api.refusal
 import retrieval.hybrid
 from api.config import Settings, load_settings
 from api.schemas import Citation, QueryResponse
+from retrieval.hybrid import SEMANTIC_EXTRACTION_K
 
 logger = logging.getLogger(__name__)
+
+PROMPT_CONTEXT_K = 5
 
 
 def _resolve_citations(llm_citations: list[dict], results: list) -> list[Citation]:
@@ -62,7 +65,7 @@ def answer_question(question: str, language: str, settings: Optional[Settings] =
     request_id = str(uuid.uuid4())
     start_time = time.monotonic()
 
-    results = retrieval.hybrid.retrieve(question, k=5)
+    results = retrieval.hybrid.retrieve(question, k=SEMANTIC_EXTRACTION_K)
     logger.info(
         "query received",
         extra={"request_id": request_id, "event": "query_received", "language": language},
@@ -70,6 +73,7 @@ def answer_question(question: str, language: str, settings: Optional[Settings] =
 
     top1_semantic_score = api.refusal.top1_semantic_score_from_results(results)
     confident = api.refusal.is_confident(top1_semantic_score, settings.refusal_cosine_threshold)
+    prompt_results = results[:PROMPT_CONTEXT_K]
 
     if not confident:
         logger.info(
@@ -96,7 +100,7 @@ def answer_question(question: str, language: str, settings: Optional[Settings] =
         return response
 
     system_prompt = api.prompts.build_system_prompt(language)
-    user_prompt = api.prompts.build_user_prompt(question, results)
+    user_prompt = api.prompts.build_user_prompt(question, prompt_results)
 
     try:
         llm_result = api.llm_client.generate_structured(system_prompt, user_prompt, api.prompts.JSON_SCHEMA, settings)
@@ -139,17 +143,37 @@ def answer_question(question: str, language: str, settings: Optional[Settings] =
         )
     else:
         llm_citations = llm_result.get("citations", [])
-        citations = _resolve_citations(llm_citations, results)
-        response = QueryResponse(
-            answer=llm_answer,
-            citations=citations,
-            refused=False,
-            status="ok",
-            confidence=top1_semantic_score,
-            threshold=settings.refusal_cosine_threshold,
-            language=language,
-            request_id=request_id,
-        )
+        citations = _resolve_citations(llm_citations, prompt_results)
+        if not citations:
+            logger.info(
+                "confident, non-refused answer had no resolvable citations; downgrading to refusal",
+                extra={
+                    "request_id": request_id,
+                    "event": "uncited_answer_downgraded_to_refusal",
+                    "language": language,
+                },
+            )
+            response = QueryResponse(
+                answer=api.messages.REFUSAL_MESSAGE[language],
+                citations=[],
+                refused=True,
+                status="ok",
+                confidence=top1_semantic_score,
+                threshold=settings.refusal_cosine_threshold,
+                language=language,
+                request_id=request_id,
+            )
+        else:
+            response = QueryResponse(
+                answer=llm_answer,
+                citations=citations,
+                refused=False,
+                status="ok",
+                confidence=top1_semantic_score,
+                threshold=settings.refusal_cosine_threshold,
+                language=language,
+                request_id=request_id,
+            )
 
     _log_query_completed(request_id, response.refused, response.status, start_time)
     return response

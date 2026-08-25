@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from api.config import Settings
 from api.main import app
 from api.schemas import QueryResponse
+from retrieval.hybrid import RetrievalResult
 
 
 def _client() -> TestClient:
@@ -123,3 +126,77 @@ def test_query_calls_answer_question_with_request_body_values(mock_answer_questi
     args, kwargs = mock_answer_question.call_args
     assert args[0] == "What is the QC unit responsible for?"
     assert args[1] == "es"
+
+
+@patch("api.main.load_settings")
+@patch("api.llm_client.groq.Groq")
+@patch("retrieval.hybrid.retrieve")
+def test_query_end_to_end_resolves_citations_from_retrieved_metadata_not_llm_payload(
+    mock_retrieve, mock_groq_cls, mock_load_settings
+):
+    """Composition test: HTTP -> refusal gate -> prompt build -> LLM client
+    parse/validate -> citation resolution -> response serialization, mocking
+    only the true external boundaries (retrieval, the provider SDK client) —
+    not api.generation.answer_question or api.llm_client.generate_structured.
+    The LLM's JSON payload can only ever carry a chunk_id (JSON_SCHEMA forbids
+    any other citation property), so a response citation exposing
+    document_title/section_heading/revision/document_id proves those came
+    from the retrieved chunk's real metadata, not from the LLM output."""
+    mock_load_settings.return_value = Settings(
+        groq_api_key="fake-key",
+        openai_api_key=None,
+        llm_provider="groq",
+        refusal_cosine_threshold=0.3,
+        log_level="INFO",
+    )
+
+    retrieved = RetrievalResult(
+        chunk_id="chunk-abc",
+        fused_score=1.0,
+        semantic_rank=1,
+        semantic_score=0.9,
+        bm25_rank=1,
+        bm25_score=1.0,
+        metadata={
+            "document_id": "doc-real",
+            "document_title": "Real Retrieved Title",
+            "section_heading": "Real Section",
+            "revision": "Rev Z",
+            "chunk_id": "chunk-abc",
+            "chunk_text": "some real chunk text",
+        },
+    )
+    mock_retrieve.return_value = [retrieved]
+
+    llm_payload = {
+        "answer": "The QC unit is responsible for X.",
+        "citations": [{"chunk_id": "chunk-abc"}],
+        "refused": False,
+    }
+    message = MagicMock()
+    message.content = json.dumps(llm_payload)
+    choice = MagicMock()
+    choice.message = message
+    fake_response = MagicMock()
+    fake_response.choices = [choice]
+
+    mock_groq_client = MagicMock()
+    mock_groq_client.chat.completions.create.return_value = fake_response
+    mock_groq_cls.return_value = mock_groq_client
+
+    with _client() as client:
+        response = client.post(
+            "/query", json={"question": "What is the QC unit responsible for?", "language": "en"}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["refused"] is False
+    assert body["status"] == "ok"
+    assert len(body["citations"]) == 1
+    citation = body["citations"][0]
+    assert citation["chunk_id"] == "chunk-abc"
+    assert citation["document_id"] == "doc-real"
+    assert citation["document_title"] == "Real Retrieved Title"
+    assert citation["section_heading"] == "Real Section"
+    assert citation["revision"] == "Rev Z"

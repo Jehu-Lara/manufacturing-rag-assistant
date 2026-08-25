@@ -4,17 +4,11 @@ import statistics
 from pathlib import Path
 
 from eval import hash_eval_set, metrics
-from retrieval.hybrid import DEFAULT_TOP_N, retrieve
+from retrieval.hybrid import SEMANTIC_EXTRACTION_K, retrieve
 
 REPORT_DIR = Path(__file__).resolve().parent / "reports"
 
 SWEEP_STEP = 0.02
-
-# retrieve()'s fused list is bounded by 2 * top_n (worst case: semantic and BM25
-# hit sets don't overlap at all), so requesting this many results guarantees the
-# pure-semantic top-1 item is present in the returned list — see
-# eval.metrics.top1_semantic_score.
-SEMANTIC_EXTRACTION_K = DEFAULT_TOP_N * 2
 
 
 def _top1_semantic_score(question_text: str) -> float:
