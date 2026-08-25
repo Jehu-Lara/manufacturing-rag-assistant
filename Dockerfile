@@ -3,6 +3,12 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/*
 
+# Hugging Face Docker Spaces run the container as a non-root user (uid 1000)
+# by default. Create that user now so ownership can be handed over to it
+# below, before anything (Nginx paths, the HF model cache, the Chroma store)
+# gets written as root during the build.
+RUN useradd -m -u 1000 user
+
 WORKDIR /app
 
 COPY requirements.txt .
@@ -12,6 +18,10 @@ COPY . .
 
 RUN rm -f /etc/nginx/sites-enabled/default
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Redirect the HF Hub cache (bge-m3's weights land here) to a path under /app
+# that the runtime `user` will own, instead of root's default ~/.cache.
+ENV HF_HOME=/app/.cache/huggingface
 
 # ingestion/output/ is gitignored (regenerated, not committed), so a fresh
 # clone needs `ingestion.run` before `retrieval.build_index` can find chunks.jsonl.
@@ -24,6 +34,15 @@ RUN python -m ingestion.run
 RUN python -m retrieval.build_index
 
 RUN chmod +x start.sh
+
+# Everything above this point (apt-get nginx install, pip install, ingestion,
+# embedding/index build) needed root. Hand ownership of everything the
+# runtime process touches — the app dir (incl. the baked index and HF cache),
+# and Nginx's log/body/pid paths — over to the non-root runtime user, then
+# switch to it for the actual running container.
+RUN chown -R user:user /app /var/log/nginx /var/lib/nginx /var/run
+
+USER user
 
 EXPOSE 7860
 
