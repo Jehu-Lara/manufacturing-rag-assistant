@@ -26,3 +26,6 @@ Thumbs.db
 
 # Subagent-driven-development scratch workspace (ledgers, briefs, review packages)
 .superpowers/
+
+# Tool cache artifacts, not project content
+.firecrawl/
