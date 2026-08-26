@@ -5,3 +5,15 @@ sentence-transformers>=3.0
 chromadb>=0.5
 rank-bm25>=0.2
 numpy>=1.26
+fastapi>=0.115
+uvicorn[standard]>=0.30
+streamlit>=1.38
+groq>=0.11
+# Floored at 3.0, not 1.50: tests/test_llm_client_json_repair.py constructs
+# openai.RateLimitError via httpx2 (the transport type openai>=3.0 uses
+# internally); older 1.x/2.x releases used plain httpx instead and would
+# leave httpx2 uninstalled, breaking test collection on a fresh install.
+openai>=3.0
+pydantic>=2.8
+httpx>=0.27
+python-dotenv>=1.0

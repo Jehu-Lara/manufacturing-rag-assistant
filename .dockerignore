@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.git/
+.superpowers/
+ingestion/output/
+retrieval/output/
+.env
+.remember/

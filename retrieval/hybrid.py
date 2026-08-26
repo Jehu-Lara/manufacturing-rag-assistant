@@ -8,6 +8,13 @@ from retrieval import bm25_index, vector_store
 RRF_K = 60
 DEFAULT_TOP_N = 20
 
+# retrieve()'s fused list is bounded by 2 * top_n (worst case: semantic and
+# BM25 hit sets don't overlap at all), so requesting this many results
+# guarantees the pure-semantic top-1 item (semantic_rank == 1) is present in
+# the returned list rather than having already been cut off by a small k —
+# see eval.metrics.top1_semantic_score / api.refusal.top1_semantic_score_from_results.
+SEMANTIC_EXTRACTION_K = DEFAULT_TOP_N * 2
+
 
 @dataclass(frozen=True)
 class RetrievalResult:
@@ -22,6 +29,11 @@ class RetrievalResult:
 
 def _rrf_scores(ranked_ids: list[str], k: int = RRF_K) -> dict[str, float]:
     return {chunk_id: 1.0 / (k + rank) for rank, chunk_id in enumerate(ranked_ids, start=1)}
+
+
+def _sort_fused_results(results: list[RetrievalResult]) -> list[RetrievalResult]:
+    results.sort(key=lambda result: (-result.fused_score, result.chunk_id))
+    return results
 
 
 def retrieve(query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[RetrievalResult]:
@@ -54,5 +66,5 @@ def retrieve(query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[Re
             )
         )
 
-    fused.sort(key=lambda result: result.fused_score, reverse=True)
+    fused = _sort_fused_results(fused)
     return fused[:k]
