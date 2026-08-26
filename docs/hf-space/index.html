@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manufacturing Knowledge RAG Assistant</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --bg-card: #ffffff;
+    --text: #1a1d23;
+    --text-muted: #5b6472;
+    --border: #e2e5ea;
+    --accent: #2451c9;
+    --accent-soft: #eaf0ff;
+    --ok: #1c7c4c;
+    --ok-soft: #e6f6ee;
+    --warn: #a15c00;
+    --warn-soft: #fff3e0;
+    --pending: #6b6f76;
+    --pending-soft: #eef0f2;
+    --diagram-box: #ffffff;
+    --diagram-stroke: #2451c9;
+    --diagram-text: #1a1d23;
+    --diagram-arrow: #8a93a3;
+    --diagram-refuse: #c94f2f;
+    --code-bg: #eef1f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --bg-card: #1c1f26;
+      --text: #e8eaed;
+      --text-muted: #9aa2b1;
+      --border: #2c313b;
+      --accent: #7fa4ff;
+      --accent-soft: #1e2740;
+      --ok: #4fd399;
+      --ok-soft: #17301f;
+      --warn: #e6a444;
+      --warn-soft: #332108;
+      --pending: #9aa2b1;
+      --pending-soft: #222630;
+      --diagram-box: #1c1f26;
+      --diagram-stroke: #7fa4ff;
+      --diagram-text: #e8eaed;
+      --diagram-arrow: #5a6273;
+      --diagram-refuse: #ef7a5c;
+      --code-bg: #22262f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
+  header { margin-bottom: 40px; }
+  h1 { font-size: 2rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .tagline { color: var(--text-muted); font-size: 1.05rem; margin: 0; }
+  .badges { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    font-size: 0.78rem; padding: 4px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border);
+  }
+  section { margin-bottom: 40px; }
+  h2 { font-size: 1.3rem; margin: 0 0 16px; }
+  h3 { font-size: 1.05rem; margin: 24px 0 8px; }
+  p { margin: 0 0 12px; color: var(--text); }
+  .muted { color: var(--text-muted); }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 24px; margin-bottom: 16px;
+  }
+  .status-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--warn-soft); color: var(--warn); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px; font-size: 0.92rem; margin-bottom: 32px;
+  }
+  .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); flex-shrink: 0; }
+  .diagram-wrap { overflow-x: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .diagram-wrap svg { display: block; margin: 0 auto; min-width: 560px; }
+  ul.checks { list-style: none; margin: 0; padding: 0; }
+  ul.checks li { padding: 6px 0 6px 26px; position: relative; }
+  ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-muted); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .pill { font-size: 0.78rem; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+  .pill-pass { background: var(--ok-soft); color: var(--ok); }
+  .pill-exception { background: var(--warn-soft); color: var(--warn); }
+  .pill-pending { background: var(--pending-soft); color: var(--pending); }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+  a { color: var(--accent); }
+  .cta {
+    display: inline-block; margin-top: 8px; padding: 10px 18px; border-radius: 8px;
+    background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; font-size: 0.92rem;
+  }
+  footer { color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 20px; margin-top: 48px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Manufacturing Knowledge RAG Assistant</h1>
+    <p class="tagline">A bilingual, citation-mandatory RAG assistant over real manufacturing SOPs, equipment manuals, and quality/safety procedures — with threshold-based refusal when it doesn't know.</p>
+    <div class="badges">
+      <span class="badge">Hybrid Retrieval (BM25 + bge-m3)</span>
+      <span class="badge">EN / ES</span>
+      <span class="badge">FastAPI + Streamlit</span>
+      <span class="badge">Groq + OpenAI fallback</span>
+      <span class="badge">Docker</span>
+    </div>
+  </header>
+
+  <div class="status-banner">
+    <span class="status-dot"></span>
+    <span><strong>Live demo:</strong> deployment in progress — Oracle Cloud's Always Free ARM tier hit a temporary regional capacity limit. This page will be updated with the live link as soon as it's up. In the meantime, everything below reflects the real, tested system — see the <a href="https://github.com/Jehu-Lara/manufacturing-rag-assistant">GitHub repo</a> for full source, tests, and eval reports.</span>
+  </div>
+
+  <section>
+    <h2>Why this project is different</h2>
+    <div class="card">
+      <ul class="checks">
+        <li><strong>Citations are never trusted from the LLM.</strong> The model only ever supplies a <code>chunk_id</code>; the document title, section heading, and revision shown to the user are always re-derived from the real retrieved chunk's metadata. This is the core anti-hallucination guarantee — a citation can't be hallucinated because it isn't LLM-generated text.</li>
+        <li><strong>Refusal is a calibrated gate, not a prompt instruction.</strong> A cosine-similarity threshold on retrieval confidence decides whether the system even attempts an answer, before generation runs — swept and calibrated against a held-out eval set, not guessed.</li>
+        <li><strong>The corpus is honestly labeled.</strong> Real public-domain U.S. federal documents (OSHA, DOE Fundamentals Handbooks, NIOSH, CFR) are mixed with clearly-labeled synthetic documents (fictional equipment manuals, sample work orders) to fill gaps public sources don't cover — every document is tagged <code>public</code>/<code>synthetic</code> and never presented as something it isn't.</li>
+        <li><strong>Bilingual end to end.</strong> Ask in English or Spanish; the answer comes back in the question's language; citations always point to the original English source document.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Architecture</h2>
+    <div class="diagram-wrap">
+<svg viewBox="0 0 720 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Architecture diagram: user request flows through nginx to Streamlit and FastAPI, then through a refusal gate, hybrid retrieval, generation, and citation resolution.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--diagram-arrow)"/>
+    </marker>
+    <marker id="arrowRefuse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--diagram-refuse)"/>
+    </marker>
+  </defs>
+  <style>
+    .box { fill: var(--diagram-box); stroke: var(--diagram-stroke); stroke-width: 1.5; }
+    .lbl { fill: var(--diagram-text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; font-size: 15px; font-weight: 600; text-anchor: middle; }
+    .sub { fill: var(--diagram-text); opacity: 0.65; font-family: -apple-system, Segoe UI, Roboto, sans-serif; font-size: 11.5px; text-anchor: middle; }
+    .edge { stroke: var(--diagram-arrow); stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+    .edgeRefuse { stroke: var(--diagram-refuse); stroke-width: 1.5; fill: none; marker-end: url(#arrowRefuse); }
+    .edgeLbl { fill: var(--diagram-arrow); font-family: -apple-system, Segoe UI, Roboto, sans-serif; font-size: 11px; text-anchor: middle; }
+  </style>
+
+  <!-- User -->
+  <rect class="box" x="270" y="10" width="180" height="50" rx="10"/>
+  <text class="lbl" x="360" y="40">User (EN / ES)</text>
+
+  <line class="edge" x1="360" y1="60" x2="360" y2="95"/>
+
+  <!-- nginx -->
+  <rect class="box" x="240" y="95" width="240" height="55" rx="10"/>
+  <text class="lbl" x="360" y="120">nginx — :7860</text>
+  <text class="sub" x="360" y="138">single external port, routes by path</text>
+
+  <line class="edge" x1="300" y1="150" x2="160" y2="195"/>
+  <line class="edge" x1="420" y1="150" x2="560" y2="195"/>
+
+  <!-- Streamlit -->
+  <rect class="box" x="40" y="195" width="240" height="55" rx="10"/>
+  <text class="lbl" x="160" y="220">Streamlit UI — :8501</text>
+  <text class="sub" x="160" y="238">EN/ES toggle, 3 states: answer / refused / error</text>
+
+  <!-- FastAPI -->
+  <rect class="box" x="440" y="195" width="240" height="55" rx="10"/>
+  <text class="lbl" x="560" y="220">FastAPI — :8000</text>
+  <text class="sub" x="560" y="238">/health, /query</text>
+
+  <line class="edge" x1="220" y1="250" x2="500" y2="290"/>
+  <text class="edgeLbl" x="400" y="270">HTTP (internal)</text>
+
+  <line class="edge" x1="560" y1="250" x2="560" y2="290"/>
+
+  <!-- Refusal gate -->
+  <rect class="box" x="440" y="290" width="240" height="65" rx="10"/>
+  <text class="lbl" x="560" y="315">Refusal Gate</text>
+  <text class="sub" x="560" y="333">cosine similarity ≥ 0.5999?</text>
+
+  <!-- Refuse branch -->
+  <line class="edgeRefuse" x1="440" y1="330" x2="150" y2="400"/>
+  <text class="edgeLbl" x="290" y="370" fill="var(--diagram-refuse)">no — below threshold</text>
+  <rect class="box" x="30" y="400" width="240" height="55" style="stroke:var(--diagram-refuse)" rx="10"/>
+  <text class="lbl" x="150" y="425" style="fill:var(--diagram-refuse)">Refusal (EN / ES)</text>
+  <text class="sub" x="150" y="443">"insufficient context to answer"</text>
+
+  <!-- Continue branch -->
+  <line class="edge" x1="560" y1="355" x2="560" y2="395"/>
+  <text class="edgeLbl" x="640" y="378">yes</text>
+
+  <!-- Hybrid retrieval -->
+  <rect class="box" x="410" y="395" width="270" height="65" rx="10"/>
+  <text class="lbl" x="545" y="420">Hybrid Retrieval</text>
+  <text class="sub" x="545" y="438">BM25 (lexical) + bge-m3 (dense) → RRF fusion</text>
+
+  <line class="edge" x1="545" y1="460" x2="545" y2="500"/>
+
+  <!-- Generation -->
+  <rect class="box" x="380" y="500" width="330" height="70" rx="10"/>
+  <text class="lbl" x="545" y="524">Generation</text>
+  <text class="sub" x="545" y="542">Groq (openai/gpt-oss-120b) → OpenAI (gpt-4o-mini) fallback</text>
+  <text class="sub" x="545" y="558">structured JSON: {answer, citations[chunk_id]}</text>
+
+  <line class="edge" x1="545" y1="570" x2="545" y2="610"/>
+
+  <!-- Citation resolution -->
+  <rect class="box" x="380" y="610" width="330" height="70" rx="10"/>
+  <text class="lbl" x="545" y="634">Citation Resolution</text>
+  <text class="sub" x="545" y="652">chunk_id → real document_id / title / section / revision</text>
+  <text class="sub" x="545" y="668">never trusted from LLM text beyond the ID</text>
+
+  <line class="edge" x1="545" y1="680" x2="330" y2="720"/>
+  <line class="edge" x1="150" y1="455" x2="270" y2="720"/>
+
+  <!-- Response -->
+  <rect class="box" x="180" y="720" width="360" height="55" rx="10"/>
+  <text class="lbl" x="360" y="745">Answer + Citations, or Refusal (EN / ES)</text>
+  <text class="sub" x="360" y="763">back through FastAPI → Streamlit → User</text>
+
+  <line class="edge" x1="360" y1="775" x2="360" y2="815"/>
+
+  <!-- Corpus note -->
+  <rect class="box" x="210" y="815" width="300" height="55" style="stroke-dasharray:4,3" rx="10"/>
+  <text class="lbl" x="360" y="838" style="font-size:13px">228 chunks · 14 documents</text>
+  <text class="sub" x="360" y="856">9 public (OSHA/DOE/NIOSH/CFR) + 5 labeled synthetic</text>
+</svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Evaluation results</h2>
+    <p class="muted">Reported honestly, including where targets aren't yet cleared — see <code>SPEC.md</code> in the repo for the full history and reasoning behind every number below.</p>
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>Metric</th><th>Result</th><th>Target</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Retrieval Recall@5</td>
+            <td>0.833</td>
+            <td>≥ 0.70</td>
+            <td><span class="pill pill-pass">Pass</span></td>
+          </tr>
+          <tr>
+            <td>Correct-refusal rate</td>
+            <td>0.900</td>
+            <td>≥ 0.80</td>
+            <td><span class="pill pill-pass">Pass</span></td>
+          </tr>
+          <tr>
+            <td>False-refusal rate</td>
+            <td>0.200</td>
+            <td>≤ 0.10</td>
+            <td><span class="pill pill-exception">Documented exception</span></td>
+          </tr>
+          <tr>
+            <td>Citation accuracy (manual review)</td>
+            <td>14/30 reviewed, 14/14 pass</td>
+            <td>≥ 0.90</td>
+            <td><span class="pill pill-pending">Review in progress</span></td>
+          </tr>
+          <tr>
+            <td>Faithfulness (manual review)</td>
+            <td>14/30 reviewed, 14/14 pass</td>
+            <td>≥ 0.90</td>
+            <td><span class="pill pill-pending">Review in progress</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top:12px;">The false-refusal exception traces almost entirely to the eval set's small (n=7) Spanish subset combined with BM25 contributing no lexical signal for Spanish queries against an English-only corpus — documented in <code>SPEC.md</code>, not hidden.</p>
+  </section>
+
+  <section>
+    <h2>Stack</h2>
+    <div class="card">
+      <p><strong>Retrieval:</strong> <code>BAAI/bge-m3</code> multilingual embeddings, ChromaDB, <code>rank-bm25</code>, Reciprocal Rank Fusion.</p>
+      <p><strong>Generation:</strong> Groq (<code>openai/gpt-oss-120b</code>) primary, OpenAI <code>gpt-4o-mini</code> fallback, structured JSON output with schema validation and repair-retry.</p>
+      <p><strong>Backend:</strong> FastAPI, Pydantic, rate limiting, structured JSON logging.</p>
+      <p><strong>Frontend:</strong> Streamlit, bilingual (EN/ES) toggle.</p>
+      <p><strong>Deploy:</strong> single Docker image (nginx + uvicorn + Streamlit), targeting Oracle Cloud's Always Free Ampere A1 (ARM) tier — ARM64 wheel compatibility verified for every native dependency before provisioning.</p>
+      <p style="margin-bottom:0;"><strong>Tests:</strong> 133 passing — ingestion, retrieval, eval metrics, and generation orchestration are real integration tests against real models/indexes; only live third-party LLM API calls are mocked, for cost and determinism.</p>
+    </div>
+  </section>
+
+  <section>
+    <a class="cta" href="https://github.com/Jehu-Lara/manufacturing-rag-assistant">View source on GitHub →</a>
+  </section>
+
+  <footer>
+    Portfolio project. Corpus mixes real public-domain U.S. federal documents with clearly-labeled synthetic content authored for this project — never presented as real facility records.
+  </footer>
+
+</div>
+</body>
+</html>
