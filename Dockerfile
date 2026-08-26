@@ -12,6 +12,14 @@ RUN useradd -m -u 1000 user
 WORKDIR /app
 
 COPY requirements.txt .
+
+# sentence-transformers pulls in torch as a transitive dependency. Installing
+# it here first, from PyTorch's CPU-only wheel index, satisfies that
+# dependency before the requirements.txt install below runs — otherwise pip
+# resolves torch's default GPU/CUDA build (torch itself plus ~15 nvidia-*
+# CUDA packages, several GB) even though this image only ever runs on CPU
+# (HF Spaces' free tier has no GPU).
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
