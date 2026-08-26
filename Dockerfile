@@ -35,12 +35,22 @@ RUN python -m retrieval.build_index
 
 RUN chmod +x start.sh
 
+# Redirect nginx's pid file to /tmp (world-writable by default): the stock
+# /run/nginx.pid path isn't reachable by the non-root runtime user, since
+# /var/run (aliased to /run on Debian) is a symlink that `chown -R .../var/run`
+# doesn't actually traverse into. Editing nginx.conf directly here rather than
+# passing `-g "pid ...;"` at runtime in start.sh — nginx treats a directive
+# passed via -g as a duplicate (fatal error) when the same directive already
+# exists in the config file, which the stock nginx.conf's `pid /run/nginx.pid;`
+# does.
+RUN sed -i 's#^pid /run/nginx.pid;#pid /tmp/nginx.pid;#' /etc/nginx/nginx.conf
+
 # Everything above this point (apt-get nginx install, pip install, ingestion,
 # embedding/index build) needed root. Hand ownership of everything the
-# runtime process touches — the app dir (incl. the baked index and HF cache),
-# and Nginx's log/body/pid paths — over to the non-root runtime user, then
-# switch to it for the actual running container.
-RUN chown -R user:user /app /var/log/nginx /var/lib/nginx /var/run
+# runtime process touches — the app dir (incl. the baked index and HF cache)
+# and Nginx's log/body paths — over to the non-root runtime user, then switch
+# to it for the actual running container.
+RUN chown -R user:user /app /var/log/nginx /var/lib/nginx
 
 USER user
 
