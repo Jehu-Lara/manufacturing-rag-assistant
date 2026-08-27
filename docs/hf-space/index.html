@@ -177,7 +177,7 @@
   <!-- FastAPI -->
   <rect class="box" x="440" y="195" width="240" height="55" rx="10"/>
   <text class="lbl" x="560" y="220">FastAPI — :8000</text>
-  <text class="sub" x="560" y="238">/health, /query</text>
+  <text class="sub" x="560" y="238">/health, /ready, /query</text>
 
   <line class="edge" x1="220" y1="250" x2="500" y2="290"/>
   <text class="edgeLbl" x="400" y="270">HTTP (internal)</text>
@@ -292,7 +292,7 @@
       <p><strong>Backend:</strong> FastAPI, Pydantic, rate limiting, structured JSON logging.</p>
       <p><strong>Frontend:</strong> Streamlit, bilingual (EN/ES) toggle.</p>
       <p><strong>Deploy:</strong> single Docker image (nginx + uvicorn + Streamlit), targeting Oracle Cloud's Always Free Ampere A1 (ARM) tier — ARM64 wheel compatibility verified for every native dependency before provisioning.</p>
-      <p style="margin-bottom:0;"><strong>Tests:</strong> 133 passing — ingestion, retrieval, eval metrics, and generation orchestration are real integration tests against real models/indexes; only live third-party LLM API calls are mocked, for cost and determinism.</p>
+      <p style="margin-bottom:0;"><strong>Tests:</strong> 168 passing — ingestion, retrieval, eval metrics, and generation orchestration are real integration tests against real models/indexes; only live third-party LLM API calls are mocked, for cost and determinism.</p>
     </div>
   </section>
 
