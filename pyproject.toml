@@ -60,9 +60,6 @@ select = ["E", "F", "I", "W"]
 # the Dockerfile base image, and this file's own requires-python all stay
 # genuinely 3.11. No code in this project uses 3.12-only syntax.
 python_version = "3.12"
-
-[[tool.mypy.overrides]]
-module = ["src.core.*", "src.domain.*", "src.adapters.*", "src.features.*", "src.main"]
 strict = true
 
 # rank_bm25 and PyYAML ship no py.typed marker / stub package — scoped, not a

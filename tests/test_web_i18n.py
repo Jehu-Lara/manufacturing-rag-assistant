@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from api.messages import GENERATION_ERROR_MESSAGE, REFUSAL_MESSAGE, UI_LABELS
+from src.features.query.prompts import GENERATION_ERROR_MESSAGE, REFUSAL_MESSAGE
+from src.web.i18n import EXAMPLE_ANSWERABLE_QUESTION, EXAMPLE_UNANSWERABLE_QUESTION, UI_LABELS
 
 _REQUIRED_UI_LABEL_KEYS = (
     "title",
@@ -21,6 +22,8 @@ _REQUIRED_UI_LABEL_KEYS = (
     "try_example_answerable_button",
     "try_example_unanswerable_button",
     "backend_unreachable_label",
+    "request_id_label",
+    "not_ready_label",
 )
 
 
@@ -37,3 +40,9 @@ def test_refusal_and_error_messages_are_non_empty_and_distinct() -> None:
         assert REFUSAL_MESSAGE[language].strip()
         assert GENERATION_ERROR_MESSAGE[language].strip()
         assert REFUSAL_MESSAGE[language] != GENERATION_ERROR_MESSAGE[language]
+
+
+def test_example_questions_are_non_empty_and_distinct() -> None:
+    assert EXAMPLE_ANSWERABLE_QUESTION.strip()
+    assert EXAMPLE_UNANSWERABLE_QUESTION.strip()
+    assert EXAMPLE_ANSWERABLE_QUESTION != EXAMPLE_UNANSWERABLE_QUESTION

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
-
 import pytest
 
-from ui.streamlit_app import classify_response_state, format_citations, pick_example_questions
+from src.web.render import classify_response_state, format_citations
 
 
 def test_classify_response_state_normal_answer():
@@ -73,59 +71,3 @@ def test_format_citations_multiple_entries_one_line_each():
 
 def test_format_citations_empty_list_returns_empty_string():
     assert format_citations([], "en") == ""
-
-
-def test_pick_example_questions_returns_answerable_and_unanswerable(tmp_path):
-    eval_set_path = tmp_path / "eval_set.json"
-    eval_set_path.write_text(
-        json.dumps(
-            {
-                "questions": [
-                    {"id": "q1", "question": "Answerable EN?", "language": "en", "answerable": True},
-                    {"id": "q2", "question": "Unanswerable EN?", "language": "en", "answerable": False},
-                    {"id": "q3", "question": "Respondible ES?", "language": "es", "answerable": True},
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    answerable, unanswerable = pick_example_questions(eval_set_path)
-    assert answerable["question"] == "Answerable EN?"
-    assert unanswerable["question"] == "Unanswerable EN?"
-
-
-def test_pick_example_questions_ignores_non_english_questions(tmp_path):
-    eval_set_path = tmp_path / "eval_set.json"
-    eval_set_path.write_text(
-        json.dumps(
-            {
-                "questions": [
-                    {"id": "q1", "question": "Respondible ES?", "language": "es", "answerable": True},
-                    {"id": "q2", "question": "No respondible ES?", "language": "es", "answerable": False},
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    with pytest.raises(ValueError):
-        pick_example_questions(eval_set_path)
-
-
-def test_pick_example_questions_raises_if_missing_category(tmp_path):
-    eval_set_path = tmp_path / "eval_set.json"
-    eval_set_path.write_text(
-        json.dumps({"questions": [{"id": "q1", "question": "Only answerable", "language": "en", "answerable": True}]}),
-        encoding="utf-8",
-    )
-    with pytest.raises(ValueError):
-        pick_example_questions(eval_set_path)
-
-
-def test_pick_example_questions_against_real_eval_set():
-    from ui.streamlit_app import EVAL_SET_PATH
-
-    answerable, unanswerable = pick_example_questions(EVAL_SET_PATH)
-    assert answerable["answerable"] is True
-    assert answerable["language"] == "en"
-    assert unanswerable["answerable"] is False
-    assert unanswerable["language"] == "en"

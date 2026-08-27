@@ -1,32 +1,12 @@
 from __future__ import annotations
 
-REFUSAL_MESSAGE: dict[str, str] = {
-    "en": (
-        "I don't have enough information in the available documents to answer "
-        "this confidently. Try rephrasing your question with more specific "
-        "terms, or consult a subject-matter expert for a definitive answer."
-    ),
-    "es": (
-        "No cuento con suficiente información en los documentos disponibles "
-        "para responder esto con confianza. Intente reformular su pregunta con "
-        "términos más específicos, o consulte a un experto en la materia para "
-        "obtener una respuesta definitiva."
-    ),
-}
-
-GENERATION_ERROR_MESSAGE: dict[str, str] = {
-    "en": (
-        "A technical error occurred while generating this answer. This is not "
-        "a refusal due to insufficient information — please try again in a "
-        "moment."
-    ),
-    "es": (
-        "Ocurrió un error técnico al generar esta respuesta. Esto no es una "
-        "negativa por falta de información — por favor, inténtelo de nuevo en "
-        "un momento."
-    ),
-}
-
+# Duplicated from api.messages.UI_LABELS, not imported (Resolved Decision #6):
+# src/web/ must have zero imports of src.domain/features/adapters, and
+# api.messages lives alongside those in spirit even though physically it's
+# still a flat top-level module — this keeps web/ genuinely HTTP-only and
+# import-isolated from the backend, matching the same isolation the
+# import-invariant test enforces for src/domain. One small, deliberate,
+# documented data duplication (a string catalog, not logic).
 UI_LABELS: dict[str, dict[str, str]] = {
     "en": {
         "title": "Manufacturing Knowledge Assistant",
@@ -47,6 +27,8 @@ UI_LABELS: dict[str, dict[str, str]] = {
         "try_example_answerable_button": "Try an answerable question",
         "try_example_unanswerable_button": "Try an unanswerable question",
         "backend_unreachable_label": "Could not reach the backend",
+        "request_id_label": "Request ID",
+        "not_ready_label": "Backend index is still loading — try again shortly.",
     },
     "es": {
         "title": "Asistente de Conocimiento de Manufactura",
@@ -70,5 +52,21 @@ UI_LABELS: dict[str, dict[str, str]] = {
         "try_example_answerable_button": "Probar una pregunta respondible",
         "try_example_unanswerable_button": "Probar una pregunta no respondible",
         "backend_unreachable_label": "No se pudo contactar al servidor",
+        "request_id_label": "ID de solicitud",
+        "not_ready_label": "El índice del servidor aún se está cargando — intente de nuevo en un momento.",
     },
 }
+
+# Hardcoded (Resolved Decision #7): src/web/ must not read eval_set.json
+# directly. These are real questions drawn from the eval set at the time
+# this was written (one answerable, one unanswerable, English), not
+# regenerated from the live eval set — purely for UX demo buttons, not an
+# eval-integrity concern (that guarantee lives entirely in
+# src/features/evaluation).
+EXAMPLE_ANSWERABLE_QUESTION = (
+    "What must an energy-control procedure include according to OSHA's lockout/tagout requirements?"
+)
+EXAMPLE_UNANSWERABLE_QUESTION = (
+    "What are the qualitative and quantitative respirator fit-testing protocols required "
+    "before an employee is assigned a respirator?"
+)

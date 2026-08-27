@@ -30,16 +30,17 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements-lock.txt
+          pip install -e . --no-deps
           pip install ruff mypy
 
       - name: Lint (ruff)
-        run: ruff check .
+        run: ruff check src tests
 
       - name: Type-check (mypy)
-        run: mypy api ingestion retrieval eval ui
+        run: mypy src
 
       - name: Verify eval set integrity
-        run: python -m eval.hash_eval_set --verify
+        run: python -m src.features.evaluation.eval_set_integrity --verify
 
       - name: Run tests
         run: pytest -v

@@ -32,14 +32,14 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 ENV HF_HOME=/app/.cache/huggingface
 
 # ingestion/output/ is gitignored (regenerated, not committed), so a fresh
-# clone needs `ingestion.run` before `retrieval.build_index` can find chunks.jsonl.
-RUN python -m ingestion.run
+# clone needs the ingestion CLI before the retrieval CLI can find chunks.jsonl.
+RUN python -m src.features.ingestion.cli
 
 # Bakes the retrieval index (embeddings + BM25) into the image at build time so
 # /health's index_loaded is true immediately at container start, and so the
 # corpus doesn't get re-embedded with bge-m3 on every container start. This
 # downloads bge-m3's ~2.27GB weights during the build — expect a slow first build.
-RUN python -m retrieval.build_index
+RUN python -m src.features.retrieval.cli
 
 RUN chmod +x start.sh
 
