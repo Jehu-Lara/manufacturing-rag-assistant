@@ -65,8 +65,8 @@ python_version = "3.12"
 module = ["src.core.*", "src.domain.*", "src.adapters.*", "src.features.*", "src.main"]
 strict = true
 
-# rank_bm25 ships no py.typed marker / stub package — scoped, not a blanket
-# ignore_missing_imports, per the "no global ignore_missing_imports" rule.
+# rank_bm25 and PyYAML ship no py.typed marker / stub package — scoped, not a
+# blanket ignore_missing_imports, per the "no global ignore_missing_imports" rule.
 [[tool.mypy.overrides]]
-module = ["rank_bm25.*"]
+module = ["rank_bm25.*", "yaml.*"]
 ignore_missing_imports = true

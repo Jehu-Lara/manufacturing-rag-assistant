@@ -74,6 +74,27 @@ def test_hybrid_retriever_uses_vector_store_metadata_for_bm25_only_hits():
     assert results[0].metadata == metadata["bm25-only"]
 
 
+def test_known_query_returns_known_relevant_chunk_in_top_k():
+    # Integration test against the real built index — requires
+    # `python -m src.features.retrieval.cli` to have been run first.
+    from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
+    from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
+    from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
+    from src.core.config import load_settings
+
+    settings = load_settings()
+    embedder = SentenceTransformersEmbedder()
+    vector_store = ChromaVectorStore(persist_dir=settings.chroma_path, embedder=embedder)
+    lexical_index = Bm25LexicalIndex(persist_path=settings.bm25_path)
+    retriever = HybridRetriever(vector_store, lexical_index)
+
+    results = retriever.retrieve("What is lockout/tagout and why does it matter?", k=3)
+    retrieved_ids = [r.chunk_id for r in results]
+    assert any(chunk_id.startswith("osha-3120-lockout-tagout::") for chunk_id in retrieved_ids), (
+        f"expected a lockout/tagout chunk in top-3, got {retrieved_ids}"
+    )
+
+
 def test_hybrid_retriever_truncates_to_k():
     metadata = {f"chunk-{i}": {"document_id": f"doc-{i}"} for i in range(5)}
     vector_store = _StubVectorStore(
