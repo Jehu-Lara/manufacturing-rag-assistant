@@ -1,3 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag4"
+version = "0.1.0"
+# Open-ended, not "<3.12": this dev/test environment actually runs Python 3.14
+# (verified — `pip install -e .` must succeed here for Phase 1's gate), while
+# production (Dockerfile) and CI (actions/setup-python) both still pin exactly
+# 3.11. A strict upper bound here would break local installs without changing
+# what CI/prod actually run, so it's left open rather than artificially tight.
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "tiktoken>=0.7",
+    "pytest>=8.0",
+    "sentence-transformers>=3.0",
+    "chromadb>=0.5",
+    "rank-bm25>=0.2",
+    "numpy>=1.26",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "streamlit>=1.38",
+    "groq>=0.11",
+    # Floored at 3.0, not 1.50: tests/test_llm_client_json_repair.py constructs
+    # openai.RateLimitError via httpx2 (the transport type openai>=3.0 uses
+    # internally); older 1.x/2.x releases used plain httpx instead and would
+    # leave httpx2 uninstalled, breaking test collection on a fresh install.
+    "openai>=3.0",
+    "pydantic>=2.8",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    # Only opentelemetry-api is a direct dependency in Phase 1 (src/core/logging.py
+    # reads the current span's trace_id, a no-op until Phase 2 wires real tracing).
+    # opentelemetry-sdk / exporter-otlp-proto-grpc are added in Phase 2 when
+    # telemetry.py actually configures a tracer provider — not needed before then.
+    "opentelemetry-api>=1.20",
+]
+
+[tool.setuptools.packages.find]
+include = ["src", "src.*"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"
@@ -6,11 +49,18 @@ target-version = "py311"
 select = ["E", "F", "I", "W"]
 
 [tool.mypy]
-# 3.12, not the project's actual 3.11 runtime (see Dockerfile): numpy==2.5.2's
-# bundled .pyi stubs use PEP 695 `type` aliases, which mypy's parser only
-# accepts when the target version is >=3.12, even though nothing in this
-# project's own code uses 3.12-only syntax. Verified none of it does before
-# making this change (all source is `from __future__ import annotations`-gated,
-# no `type` statements, no other version-gated syntax).
+# Permanent, documented exception (not a workaround pending removal — see
+# docs/adr/001-modular-monolith-src-layout.md and the migration plan's
+# Resolved Decision #5): numpy==2.5.2's bundled .pyi stubs use PEP 695 `type`
+# aliases, which mypy's parser only accepts when python_version >= 3.12.
+# Verified directly: no per-module override (follow_imports=skip/silent on
+# numpy.*) works around this, and mypy is already at its latest release
+# (2.3.1) — there is no fix available except pinning mypy's own target here.
+# This affects ONLY mypy's type-checking target: CI's actions/setup-python,
+# the Dockerfile base image, and this file's own requires-python all stay
+# genuinely 3.11. No code in this project uses 3.12-only syntax.
 python_version = "3.12"
-ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["src.core.*", "src.domain.*"]
+strict = true
