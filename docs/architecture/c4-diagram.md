@@ -11,7 +11,7 @@ the migration plan's Phase 4b appendix). The diagrams below reflect that:
 graph TB
     operator["Operator / demo visitor<br/>(browser)"]
 
-    subgraph container["Single Docker container (Hugging Face Space, port 7860)"]
+    subgraph container["Single Docker container (verified locally; Oracle VM target, port 7860)"]
         nginx["nginx<br/>reverse proxy"]
         streamlit["Streamlit process<br/>src/web/app.py"]
         api["FastAPI process<br/>src.main:app (uvicorn)"]
@@ -105,6 +105,8 @@ graph TB
     apionly --> volume
 ```
 
-Not implemented: blocked on choosing a deploy target that supports
-multi-service compose and persistent volumes (today's HF Docker Space free
-tier supports neither), per ADR-005.
+Not implemented: deliberately deferred until an Oracle Ampere A1 VM can be
+provisioned and the real target environment can be tested. Oracle supports
+multi-service compose and persistent volumes; regional ARM capacity, not a
+hosting constraint, is the current blocker. The exact split remains a human
+decision after provisioning, per ADR-005.

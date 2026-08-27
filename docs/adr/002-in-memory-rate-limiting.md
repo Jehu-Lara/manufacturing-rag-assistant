@@ -3,9 +3,9 @@
 ## Context
 
 `POST /query` needs basic abuse protection against a public demo endpoint.
-The deploy target (a Hugging Face Docker Space) runs one container with one
-uvicorn worker — there is no shared store today to keep a rate limit in
-sync across replicas even if there were more than one.
+The currently verified deploy image, targeting a single Oracle Cloud VM,
+runs one container with one uvicorn worker — there is no shared store today
+to keep a rate limit in sync across replicas even if there were more than one.
 
 ## Decision
 

@@ -1,142 +1,101 @@
 # Manufacturing Knowledge RAG Assistant
 
-Portfolio Project 4: a bilingual (EN/ES), citation-mandatory Retrieval-Augmented Generation assistant over manufacturing SOPs, equipment manuals, and quality procedures, with threshold-based refusal when retrieval doesn't support a confident answer.
+Portfolio Project 4: a bilingual (EN/ES), citation-mandatory Retrieval-Augmented Generation assistant over manufacturing SOPs, equipment manuals, and quality procedures, with threshold-based refusal when retrieval does not support a confident answer.
 
-See [`SPEC.md`](SPEC.md) for full scope, acceptance criteria, no-goals, and the data-honesty/language policy. See [`CLAUDE.md`](CLAUDE.md) for project conventions if you're working on this repo with Claude Code.
+See [`SPEC.md`](SPEC.md) for the complete scope, decisions, measured limitations, and data-honesty policy. See [`CLAUDE.md`](CLAUDE.md) for current contributor commands and architecture rules.
 
-**Current status**: Phase 1 (corpus + ingestion) and Phase 2 (retrieval) complete. Phase 3 (generation, UI, deployment) is implemented — the FastAPI backend, Streamlit UI, and Docker container all exist and are tested — but **not yet deployed**: no live Hugging Face Spaces instance exists yet. See `SPEC.md`'s phase status sections, including the Phase 3 honest-disclosure note on the refusal threshold gate.
+## Current status
 
-## Corpus
+- Corpus and ingestion: complete — 14 documents (9 public, 5 clearly labeled synthetic) produce 228 metadata-complete chunks.
+- Retrieval: complete — hybrid BM25 + `BAAI/bge-m3` retrieval; Recall@5 is 0.833.
+- Generation/API/UI: implemented and tested — FastAPI, Streamlit, Groq (`openai/gpt-oss-120b`) with OpenAI (`gpt-4o-mini`) fallback, bilingual responses, deterministic refusal gate, and citations resolved from retrieved metadata.
+- Evaluation: correct-refusal 0.900 (passes), false-refusal 0.200 (documented exception), citation accuracy 23/30 = 0.767 (below target), and faithfulness 29/30 = 0.967 (passes). The citation and faithfulness verdicts are human-reviewed, not LLM-as-judge scores.
+- Public showcase: live as a free [Hugging Face Static Space](https://huggingface.co/spaces/JehuLara/manufacturing-rag-assistant). It is a portfolio page only and does not run the RAG.
+- Interactive deployment: Oracle Cloud Always Free Ampere A1 (ARM) is the intended runtime. Provisioning is currently blocked by Oracle's regional ARM capacity in Monterrey; no live interactive deployment exists yet.
 
-14 documents under `corpus/`: 9 real, public-domain U.S. government documents (OSHA publications, DOE Fundamentals Handbooks, NIOSH guidance, CFR regulatory text) and 5 clearly-labeled synthetic documents filling gaps public sources don't cover. Every document is listed in [`corpus/SOURCES.md`](corpus/SOURCES.md) with its exact source and public/synthetic label.
+## Architecture
 
-## Running Ingestion Locally
+All application code lives under `src/` as a modular monolith with ports and adapters:
 
-Requires Python 3.11+.
+- `src/domain/`: framework-free models, ports, RRF/refusal policy, and citation resolution.
+- `src/features/`: ingestion, retrieval, query, and evaluation use cases.
+- `src/adapters/`: FastAPI and concrete ChromaDB, BM25, embedding, and LLM adapters.
+- `src/web/`: Streamlit UI, communicating with the backend over HTTP only.
+- `src/main.py`: FastAPI composition root.
+
+The currently verified Docker image runs nginx on port 7860, FastAPI on 8000, and Streamlit on 8501 in one container. Splitting API and web into separate containers is explicitly deferred until an Oracle VM exists; see [`docs/adr/005-deploy-container-shape.md`](docs/adr/005-deploy-container-shape.md).
+
+## Setup
+
+Python 3.11 is the production and CI target.
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-python -m ingestion.run
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+pip install -r requirements-lock.txt
+pip install -e . --no-deps
 ```
 
-`requirements.txt` pins floors (`>=`), not exact versions — deliberate, see the comment in that file. For a reproducible install matching a known-good, fully-tested dependency tree, use `requirements-lock.txt` instead (`pip install -r requirements-lock.txt`); regenerate it with `pip freeze > requirements-lock.txt` after any `requirements.txt` change.
+Copy `.env.example` to `.env`. `GROQ_API_KEY` is needed for primary generation; `OPENAI_API_KEY` is the optional fallback. If `API_KEY` is set, clients must send the same value as `X-API-Key` to `POST /query`. Never commit real credentials.
 
-The first run needs network access once, to let `tiktoken` download and cache its `cl100k_base` encoding file; subsequent runs work offline. If that download fails with no network available, `python -m ingestion.run` will raise a clear error saying so rather than an opaque one.
-
-Expected output:
-
-```
-Documents processed: 14 (9 public, 5 synthetic)
-Chunks produced: <N>
-Total corpus size: <words> words, <chars> characters
-Chunks written to: .../ingestion/output/chunks.jsonl
-```
-
-`ingestion/output/chunks.jsonl` (one JSON object per chunk, gitignored/regenerated on every run) is the artifact Phase 2 reads to build embeddings — it is not re-derived by re-parsing the corpus Markdown files.
-
-## Running Retrieval Evaluation Locally
-
-Requires `ingestion/output/chunks.jsonl` to already exist (run ingestion first, above).
+## Build the corpus and indexes
 
 ```bash
-python -m retrieval.build_index
+python -m src.features.ingestion.cli
+python -m src.features.retrieval.cli
 ```
 
-Embeds all chunks with `BAAI/bge-m3` (multilingual, CPU-only) and builds both the ChromaDB vector store and the BM25 lexical index under `retrieval/output/` (gitignored/regenerated on every run). The first run needs network access to download and cache the ~2.3GB model; subsequent runs work offline (`HF_HUB_OFFLINE=1` speeds this up once cached). Expected output:
+These commands write regenerated, gitignored artifacts to `ingestion/output/` and `retrieval/output/`. The lexical index is JSON (`retrieval/output/bm25_index.json`), never pickle. The first retrieval build downloads `BAAI/bge-m3`; after it is cached, `HF_HUB_OFFLINE=1` avoids network checks.
 
-```
-Chunks embedded: 228
-Embedding model: BAAI/bge-m3 (max_seq_length=8192)
-Vector store: .../retrieval/output/chroma (collection 'manufacturing_chunks')
-BM25 index: .../retrieval/output/bm25_index.pkl
-```
-
-Then run the evaluation:
+## Run the API and UI
 
 ```bash
-python -m eval.run_eval
+uvicorn src.main:app --reload
 ```
 
-Verifies `eval/eval_set.json`'s SHA-256 hash, runs all 40 hand-written questions (30 answerable — including 7 in Spanish against the English corpus, 10 deliberately unanswerable) through the hybrid retriever, and writes a versioned report to `eval/reports/retrieval_report_v<version>.md` with recall@3, recall@5, MRR, a per-language breakdown, and example queries. See `SPEC.md`'s Phase 2 Status for the latest results (recall@5 = 0.833, MRR = 0.637).
-
-To edit the eval set, change `eval/eval_set.json`, bump its `version` field, then regenerate the hash:
+The API exposes `GET /health`, `GET /ready`, and `POST /query` on port 8000. In a second terminal:
 
 ```bash
-python -m eval.hash_eval_set --write
+streamlit run src/web/app.py
 ```
 
-To sweep and pick the refusal cosine-similarity threshold used by Phase 3:
+The UI reads `API_BASE_URL` (default `http://localhost:8000`) and the optional `API_KEY` from its environment.
+
+## Evaluation
 
 ```bash
-python -m eval.threshold_analysis
+python -m src.features.evaluation.eval_set_integrity --verify
+python -m src.features.evaluation.retrieval_eval
+python -m src.features.evaluation.threshold_analysis
+python -m src.features.evaluation.generation_eval
 ```
 
-Writes `eval/reports/threshold_analysis_v<version>.md`. See `SPEC.md`'s Phase 3 Status for an honest note on what this threshold does and doesn't guarantee on its own.
+Generation evaluation makes real third-party LLM calls, waits between questions for rate limits, and can incur API usage. It writes the automated report and a manual-review CSV; citation accuracy and faithfulness remain human-owned verdicts.
 
-## Running the Generation API and UI Locally
-
-Requires `retrieval/output/` to already exist (run `python -m retrieval.build_index` first, above) and a `.env` file (copy `.env.example`) with at least a `GROQ_API_KEY` set (`OPENAI_API_KEY` is used as fallback only). `API_KEY` is optional: if set, `/query` requires the same value in the request's `X-API-Key` header (the Streamlit UI reads and sends it automatically from its own environment); leave it unset for local development.
-
-Run the FastAPI backend:
-
-```bash
-uvicorn api.main:app --reload
-```
-
-Serves `GET /health` and `POST /query` on `http://localhost:8000`.
-
-In a second terminal, with the backend already running, run the Streamlit UI:
-
-```bash
-streamlit run ui/streamlit_app.py
-```
-
-Reads the `API_BASE_URL` env var (default `http://localhost:8000`) to reach the backend.
-
-To evaluate end-to-end generation quality (retrieval + refusal + LLM generation + citation resolution) against the eval set:
-
-```bash
-python -m eval.run_generation_eval
-```
-
-Makes real LLM API calls for all 40 eval questions with a deliberate 20-second delay between each (to stay under Groq's free-tier rate limits) — **expect this to take roughly 13-15 minutes**, and expect real (small) LLM API spend. Writes `eval/reports/generation_eval_v<version>.md` (correct-refusal rate, false-refusal rate, latency summary) and `eval/reports/manual_review_checklist_v<version>.csv` (citation accuracy and faithfulness are graded by hand, not by this script — see the report's own "Manual Review Required" section).
-
-## Running the Docker Build Locally
-
-The combined-container deploy image (FastAPI + Streamlit + nginx in one container, matching the Hugging Face Spaces Docker SDK target):
+## Docker
 
 ```bash
 docker build -t rag4 .
-docker run -p 7860:7860 rag4
+docker run --env-file .env -p 7860:7860 rag4
 ```
 
-The build runs ingestion and builds the retrieval index (embedding all chunks with `bge-m3`) as part of the image build itself, so **the first build is slow — expect it to take 10+ minutes**, most of it downloading and embedding with `bge-m3`'s ~2.3GB weights; subsequent builds only redo this if the corpus or index-build code changes.
+The amd64 image was verified end to end with a real build and run. nginx correctly proxies `/health`, `/ready`, and `/query`; `/ready` reported `index_loaded: true` against the baked-in real index. ARM64 dependency wheels and a long-running QEMU build were verified, but a complete native ARM build/run remains pending until Oracle capacity is available.
 
-**Not verified end-to-end in this repo's dev environment** — Docker Desktop's WSL2 backend was unavailable in the sandbox this branch was built in, so the build/run has not actually been exercised here. The Dockerfile's non-root-user handling (required for Hugging Face Spaces, which runs containers as uid 1000) was fixed by static reasoning about Debian/Docker/HF-Spaces semantics, not confirmed via a real build — treat it as the first thing to test once a real Docker daemon is available (locally, or during actual Spaces deployment).
-
-**Hugging Face Space config note:** a Space's `sdk`/`app_port`/etc. configuration comes from a YAML frontmatter block at the very top of the `README.md` sitting at the root of the git repository backing that Space. If this project is deployed the standard way — adding the Space as a second git remote and pushing this same repo's content to it — then that root `README.md` is *this file*, meaning the required `sdk: docker` / `app_port: 7860` frontmatter block will need to be added to the top of this exact file immediately before that push (it is deliberately not added now, since it isn't accurate until a Space actually exists to push to, and premature frontmatter here would misrepresent this repo's current, undeployed state). If a separate mirror repo is used for the Space instead, the same frontmatter requirement applies to that repo's root `README.md` instead. Either way, this is a deploy-time step, not something to pre-populate speculatively before the Space exists.
-
-## Running Tests
+## Quality gates
 
 ```bash
+ruff check src tests
+mypy src
+python -m src.features.evaluation.eval_set_integrity --verify
 pytest
 ```
 
-Covers: chunking correctness (target token band, overlap, section-boundary integrity), metadata completeness (every chunk has all required fields — see `ingestion/metadata.py`), corpus manifest consistency (every file in `corpus/SOURCES.md` exists, every corpus file is listed there with the correct public/synthetic label), the embedding model's fit against real corpus chunk sizes, hybrid retriever fusion correctness, eval-set integrity (hash, split, expected chunk IDs all exist), refusal threshold logic, LLM client JSON repair/retry/fallback behavior (provider SDKs mocked — no real LLM calls), generation orchestration and citation resolution, the FastAPI endpoints, and the Streamlit UI's pure logic functions.
+The current suite contains 168 passing tests. CI runs the same lint, type, integrity, and test gates on pushes and pull requests.
 
-## Linting and Type-Checking
+## Evidence
 
-```bash
-pip install ruff mypy
-ruff check .
-mypy api ingestion retrieval eval ui
-```
-
-Config lives in `pyproject.toml`. `mypy` is scoped to the application code, not `tests/`.
-
-## Continuous Integration
-
-`.github/workflows/ci.yml` runs on every push/PR to `master`: installs `requirements-lock.txt`, runs `ruff check .` and `mypy`, verifies the eval set's SHA-256 hash (`python -m eval.hash_eval_set --verify`), then runs the full `pytest` suite — including the real `bge-m3` model load in `tests/test_embedding_model_fits_corpus.py`, cached across runs via `actions/cache` to avoid re-downloading the ~2.3GB weights every time.
+- [`eval/reports/retrieval_report_v1.0.0.md`](eval/reports/retrieval_report_v1.0.0.md)
+- [`eval/reports/generation_eval_v1.0.0.md`](eval/reports/generation_eval_v1.0.0.md)
+- [`eval/reports/manual_review_checklist_v1.0.0.csv`](eval/reports/manual_review_checklist_v1.0.0.csv)
+- [`corpus/SOURCES.md`](corpus/SOURCES.md)

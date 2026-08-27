@@ -268,20 +268,20 @@
           </tr>
           <tr>
             <td>Citation accuracy (manual review)</td>
-            <td>14/30 reviewed, 14/14 pass</td>
+            <td>23/30 (0.767)</td>
             <td>≥ 0.90</td>
-            <td><span class="pill pill-pending">Review in progress</span></td>
+            <td><span class="pill pill-exception">Below target</span></td>
           </tr>
           <tr>
             <td>Faithfulness (manual review)</td>
-            <td>14/30 reviewed, 14/14 pass</td>
+            <td>29/30 (0.967)</td>
             <td>≥ 0.90</td>
-            <td><span class="pill pill-pending">Review in progress</span></td>
+            <td><span class="pill pill-pass">Pass</span></td>
           </tr>
         </tbody>
       </table>
     </div>
-    <p class="muted" style="margin-top:12px;">The false-refusal exception traces almost entirely to the eval set's small (n=7) Spanish subset combined with BM25 contributing no lexical signal for Spanish queries against an English-only corpus — documented in <code>SPEC.md</code>, not hidden.</p>
+    <p class="muted" style="margin-top:12px;">The strict citation score counts six faithful self-refusals with no citation as failures, plus one genuine miscitation. On the 24 questions where the system attempted an answer, citation accuracy is 23/24 (0.958). The official all-question metric remains 23/30 (0.767), below target. The false-refusal exception traces mainly to the small (n=7) Spanish subset and weak BM25 lexical signal against the English-only corpus — documented in <code>SPEC.md</code>, not hidden.</p>
   </section>
 
   <section>

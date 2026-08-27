@@ -3,10 +3,10 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# Hugging Face Docker Spaces run the container as a non-root user (uid 1000)
-# by default. Create that user now so ownership can be handed over to it
-# below, before anything (Nginx paths, the HF model cache, the Chroma store)
-# gets written as root during the build.
+# Run the application as a non-root user (uid 1000) for least privilege and
+# predictable ownership on the Oracle VM or any other container runtime.
+# Create that user before the Nginx paths, model cache, and Chroma store are
+# written during the build.
 RUN useradd -m -u 1000 user
 
 WORKDIR /app
@@ -18,7 +18,7 @@ COPY requirements.txt .
 # dependency before the requirements.txt install below runs — otherwise pip
 # resolves torch's default GPU/CUDA build (torch itself plus ~15 nvidia-*
 # CUDA packages, several GB) even though this image only ever runs on CPU
-# (HF Spaces' free tier has no GPU).
+# (the intended Oracle Ampere A1 runtime is CPU-only).
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
