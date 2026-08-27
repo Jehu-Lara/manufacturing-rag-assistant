@@ -174,6 +174,174 @@ def test_live_app_matches_phase0_snapshot() -> None:
     assert live_cases == stored_cases
 
 
+def _new_app_health_normal() -> dict:
+    from src.adapters.primary.http.deps import get_vector_store
+    from src.main import app
+    from tests.fakes import InMemoryVectorStore
+
+    app.dependency_overrides[get_vector_store] = lambda: InMemoryVectorStore(ready=True)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/health")
+    finally:
+        app.dependency_overrides.clear()
+    return {
+        "case": "health_normal",
+        "request": {"method": "GET", "path": "/health"},
+        "response_status": response.status_code,
+        "response_json": response.json(),
+    }
+
+
+def _new_app_health_degraded() -> dict:
+    from src.adapters.primary.http.deps import get_vector_store
+    from src.main import app
+    from tests.fakes import InMemoryVectorStore
+
+    app.dependency_overrides[get_vector_store] = lambda: InMemoryVectorStore(ready=False)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/health")
+    finally:
+        app.dependency_overrides.clear()
+    return {
+        "case": "health_degraded",
+        "request": {"method": "GET", "path": "/health"},
+        "response_status": response.status_code,
+        "response_json": response.json(),
+    }
+
+
+def _new_app_query_confident() -> dict:
+    from src.adapters.primary.http.deps import get_query_use_case, get_rate_limiter, get_settings
+    from src.adapters.primary.http.rate_limit import RateLimiter
+    from src.features.query.use_cases import QueryUseCase
+    from src.main import app
+    from tests.fakes import InMemoryLLMClient, InMemoryRetriever
+
+    request_body = {"question": "What is the QC unit responsible for?", "language": "en"}
+    settings = _settings(threshold=0.3)
+    retriever = InMemoryRetriever([_retrieval_result("chunk-abc", 0.9)])
+    llm = InMemoryLLMClient(
+        response={
+            "answer": "The QC unit is responsible for approving or rejecting components.",
+            "citations": [{"chunk_id": "chunk-abc"}],
+            "refused": False,
+        }
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_query_use_case] = lambda: QueryUseCase(retriever, llm, settings)
+    app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(max_requests=1000)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/query", json=request_body)
+    finally:
+        app.dependency_overrides.clear()
+    return {
+        "case": "query_confident",
+        "request": {"method": "POST", "path": "/query", "json": request_body},
+        "response_status": response.status_code,
+        "response_json": _mask_request_id(response.json()),
+    }
+
+
+def _new_app_query_refused() -> dict:
+    from src.adapters.primary.http.deps import get_query_use_case, get_rate_limiter, get_settings
+    from src.adapters.primary.http.rate_limit import RateLimiter
+    from src.features.query.use_cases import QueryUseCase
+    from src.main import app
+    from tests.fakes import InMemoryLLMClient, InMemoryRetriever
+
+    request_body = {"question": "What's the weather today?", "language": "en"}
+    settings = _settings(threshold=0.7)
+    retriever = InMemoryRetriever([_retrieval_result("chunk-low", 0.1)])
+    llm = InMemoryLLMClient()
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_query_use_case] = lambda: QueryUseCase(retriever, llm, settings)
+    app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(max_requests=1000)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/query", json=request_body)
+    finally:
+        app.dependency_overrides.clear()
+    return {
+        "case": "query_refused",
+        "request": {"method": "POST", "path": "/query", "json": request_body},
+        "response_status": response.status_code,
+        "response_json": _mask_request_id(response.json()),
+    }
+
+
+def _new_app_query_generation_error() -> dict:
+    from src.adapters.primary.http.deps import get_query_use_case, get_rate_limiter, get_settings
+    from src.adapters.primary.http.rate_limit import RateLimiter
+    from src.core.errors import GenerationError
+    from src.features.query.use_cases import QueryUseCase
+    from src.main import app
+    from tests.fakes import InMemoryLLMClient, InMemoryRetriever
+
+    request_body = {"question": "What is the QC unit responsible for?", "language": "en"}
+    settings = _settings(threshold=0.3)
+    retriever = InMemoryRetriever([_retrieval_result("chunk-abc", 0.9)])
+    llm = InMemoryLLMClient(error=GenerationError("provider unavailable"))
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_query_use_case] = lambda: QueryUseCase(retriever, llm, settings)
+    app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(max_requests=1000)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/query", json=request_body)
+    finally:
+        app.dependency_overrides.clear()
+    return {
+        "case": "query_generation_error",
+        "request": {"method": "POST", "path": "/query", "json": request_body},
+        "response_status": response.status_code,
+        "response_json": _mask_request_id(response.json()),
+    }
+
+
+def _new_app_query_unhandled_exception_500() -> dict:
+    from src.adapters.primary.http.deps import get_query_use_case, get_rate_limiter
+    from src.adapters.primary.http.rate_limit import RateLimiter
+    from src.main import app
+
+    request_body = {"question": "What is the QC unit responsible for?", "language": "en"}
+
+    class _RaisingUseCase:
+        async def answer_question(self, question: str, language: str):
+            raise RuntimeError("index not built")
+
+    app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(max_requests=1000)
+    app.dependency_overrides[get_query_use_case] = lambda: _RaisingUseCase()
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post("/query", json=request_body)
+    finally:
+        app.dependency_overrides.clear()
+    return {
+        "case": "query_unhandled_exception_500",
+        "request": {"method": "POST", "path": "/query", "json": request_body},
+        "response_status": response.status_code,
+        "response_json": response.json(),
+    }
+
+
+def test_new_app_matches_phase0_snapshot() -> None:
+    """Phase 2 gate: proves src.main:app's POST /query and GET /health JSON
+    shapes are byte-identical to the Phase 0 snapshot captured from the old
+    api.main:app — only the code location behind them changed."""
+    new_app_cases = [
+        _new_app_health_normal(),
+        _new_app_health_degraded(),
+        _new_app_query_confident(),
+        _new_app_query_refused(),
+        _new_app_query_generation_error(),
+        _new_app_query_unhandled_exception_500(),
+    ]
+    stored_cases = _load_snapshot()
+    assert new_app_cases == stored_cases
+
+
 if __name__ == "__main__":
     cases = _capture_all_cases()
     SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)

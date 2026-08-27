@@ -30,7 +30,7 @@ class LexicalIndexPort(Protocol):
 
 @runtime_checkable
 class RetrieverPort(Protocol):
-    def retrieve(self, query_text: str, k: int, top_n: int) -> list[RetrievalResult]: ...
+    def retrieve(self, query_text: str, k: int = 5, top_n: int = 20) -> list[RetrievalResult]: ...
 
 
 @runtime_checkable

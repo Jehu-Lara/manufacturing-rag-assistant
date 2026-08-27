@@ -18,6 +18,16 @@ _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_RATE_LIMIT_PER_MINUTE = 20
 _DEFAULT_CORS_ALLOW_ORIGINS = ("*",)
 
+# Repo root, used only to compute default index paths below when CHROMA_PATH/
+# BM25_PATH aren't set — same physical retrieval/output/ location the old
+# retrieval/build_index.py always wrote to, so an already-built index keeps
+# working through the src/ migration without requiring new env vars. The
+# BM25 filename is .json, not .pkl: see src/adapters/secondary/lexical (no
+# pickle in runtime code, ADR-004).
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_DEFAULT_CHROMA_PATH = _REPO_ROOT / "retrieval" / "output" / "chroma"
+_DEFAULT_BM25_PATH = _REPO_ROOT / "retrieval" / "output" / "bm25_index.json"
+
 
 class Settings(BaseModel):
     """A validated, inert data holder — not a pydantic_settings.BaseSettings.
@@ -39,8 +49,8 @@ class Settings(BaseModel):
     rate_limit_per_minute: int = _DEFAULT_RATE_LIMIT_PER_MINUTE
     api_key: Optional[str] = None
     cors_allow_origins: list[str] = list(_DEFAULT_CORS_ALLOW_ORIGINS)
-    chroma_path: Optional[Path] = None
-    bm25_path: Optional[Path] = None
+    chroma_path: Path = _DEFAULT_CHROMA_PATH
+    bm25_path: Path = _DEFAULT_BM25_PATH
 
 
 def load_settings() -> Settings:
@@ -86,10 +96,10 @@ def load_settings() -> Settings:
     )
 
     chroma_path_raw = os.environ.get("CHROMA_PATH")
-    chroma_path = Path(chroma_path_raw) if chroma_path_raw else None
+    chroma_path = Path(chroma_path_raw) if chroma_path_raw else _DEFAULT_CHROMA_PATH
 
     bm25_path_raw = os.environ.get("BM25_PATH")
-    bm25_path = Path(bm25_path_raw) if bm25_path_raw else None
+    bm25_path = Path(bm25_path_raw) if bm25_path_raw else _DEFAULT_BM25_PATH
 
     return Settings(
         groq_api_key=groq_api_key,
