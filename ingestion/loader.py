@@ -7,6 +7,8 @@ from typing import Iterable, Optional
 
 import yaml
 
+from ingestion.metadata import SourceType
+
 CORPUS_ROOT = Path(__file__).resolve().parent.parent / "corpus"
 SOURCES_MANIFEST = CORPUS_ROOT / "SOURCES.md"
 
@@ -27,7 +29,7 @@ class Document:
     document_id: str
     document_title: str
     revision: str
-    source_type: str
+    source_type: SourceType
     source_url_or_note: str
     source_page_range: Optional[str]
     file_path: Path
@@ -63,12 +65,13 @@ def load_document(file_path: Path) -> Document:
             f"{file_path}: frontmatter source_type '{frontmatter['source_type']}' "
             f"does not match its directory (expected '{expected_type}')"
         )
+    source_type: SourceType = frontmatter["source_type"]  # validated against ("public", "synthetic") above
 
     return Document(
         document_id=frontmatter["document_id"],
         document_title=frontmatter["document_title"],
         revision=frontmatter["revision"],
-        source_type=frontmatter["source_type"],
+        source_type=source_type,
         source_url_or_note=frontmatter["source_url_or_note"],
         source_page_range=frontmatter.get("source_page_range"),
         file_path=file_path,

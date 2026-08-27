@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from eval.metrics import mean_reciprocal_rank, reciprocal_rank, recall_at_k, top1_semantic_score
+from eval.metrics import mean_reciprocal_rank, recall_at_k, reciprocal_rank, top1_semantic_score
 
 
 @dataclass

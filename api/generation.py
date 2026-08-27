@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Optional
+from typing import Literal, Optional
 
 import api.llm_client
 import api.messages
@@ -58,7 +58,9 @@ def _log_query_completed(request_id: str, refused: bool, status: str, start_time
     )
 
 
-def answer_question(question: str, language: str, settings: Optional[Settings] = None) -> QueryResponse:
+def answer_question(
+    question: str, language: Literal["en", "es"], settings: Optional[Settings] = None
+) -> QueryResponse:
     if settings is None:
         settings = load_settings()
 

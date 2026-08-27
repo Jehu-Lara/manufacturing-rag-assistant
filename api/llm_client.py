@@ -36,7 +36,8 @@ _JSON_SCHEMA_RETRY_ERROR_TYPES = (groq.BadRequestError, groq.UnprocessableEntity
 
 
 class GenerationError(Exception):
-    """Raised when structured generation fails on both providers after retries — a real technical failure, not a confidence-based refusal."""
+    """Raised when structured generation fails on both providers after
+    retries — a real technical failure, not a confidence-based refusal."""
 
 
 def generate_structured(
@@ -45,7 +46,8 @@ def generate_structured(
     schema: dict,
     settings: "Settings",
 ) -> dict:
-    """Returns a dict parsed from the LLM's JSON response, validated against `schema`. Raises GenerationError if both providers fail."""
+    """Returns a dict parsed from the LLM's JSON response, validated against
+    `schema`. Raises GenerationError if both providers fail."""
     primary = settings.llm_provider
     fallback = _other_provider(primary)
     attempts_summary: list[str] = []
@@ -69,6 +71,7 @@ def generate_structured(
 
         parsed, error = _try_parse_and_validate(raw_text, schema)
         if error is None:
+            assert parsed is not None
             logger.info(
                 "structured generation succeeded",
                 extra={"provider": provider, "repaired": False},
@@ -93,6 +96,7 @@ def generate_structured(
 
         parsed, repair_error = _try_parse_and_validate(repaired_raw, schema)
         if repair_error is None:
+            assert parsed is not None
             logger.info(
                 "structured generation succeeded after repair",
                 extra={"provider": provider, "repaired": True},
@@ -160,7 +164,8 @@ def _get_provider_response(
                 extra={"provider": provider, "wait_seconds": wait_seconds, "attempt": attempt_index + 1},
             )
             time.sleep(wait_seconds)
-    raise last_exc  # pragma: no cover - loop always returns or raises above
+    assert last_exc is not None  # pragma: no cover - loop always returns or raises above
+    raise last_exc
 
 
 def _extract_retry_after_seconds(exc: Exception) -> Optional[float]:
@@ -197,6 +202,10 @@ def _call_groq(system_prompt: str, user_prompt: str, schema: dict, api_key: Opti
     client = groq.Groq(api_key=api_key, max_retries=0)
     messages = _messages(system_prompt, user_prompt)
     try:
+        # messages/response_format are built dynamically from `schema` (a
+        # plain JSON Schema dict, not known statically), so they can't match
+        # the SDK's precise per-role TypedDict overloads — the runtime shape
+        # is correct even though the static type isn't.
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=messages,
@@ -204,7 +213,7 @@ def _call_groq(system_prompt: str, user_prompt: str, schema: dict, api_key: Opti
                 "type": "json_schema",
                 "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
             },
-        )
+        )  # type: ignore[call-overload]
     except _JSON_SCHEMA_RETRY_ERROR_TYPES as exc:
         if not _is_unsupported_response_format_error(exc):
             raise
@@ -216,12 +225,13 @@ def _call_groq(system_prompt: str, user_prompt: str, schema: dict, api_key: Opti
             model=GROQ_MODEL,
             messages=messages,
             response_format={"type": "json_object"},
-        )
+        )  # type: ignore[call-overload]
     return response.choices[0].message.content
 
 
 def _call_openai(system_prompt: str, user_prompt: str, schema: dict, api_key: Optional[str]) -> str:
     client = openai.OpenAI(api_key=api_key, max_retries=0)
+    # Same dynamic-schema reasoning as _call_groq above.
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=_messages(system_prompt, user_prompt),
@@ -229,7 +239,7 @@ def _call_openai(system_prompt: str, user_prompt: str, schema: dict, api_key: Op
             "type": "json_schema",
             "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
         },
-    )
+    )  # type: ignore[call-overload]
     return response.choices[0].message.content
 
 

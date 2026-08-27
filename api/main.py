@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import api.generation
@@ -28,6 +29,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Manufacturing Knowledge RAG Assistant", lifespan=lifespan)
+
+# No cookies/credentials are used anywhere in this API, so an open origin
+# list carries no CSRF/credential-theft risk here — this only stops browsers
+# from silently dropping cross-origin responses for a legitimate third-party
+# caller (e.g. the showcase page), not a security boundary in itself; the
+# actual access control is the optional API-key check on /query below.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 
 @app.exception_handler(Exception)
@@ -62,7 +75,19 @@ def health() -> HealthResponse:
 
 
 @app.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest, http_request: Request) -> QueryResponse:
+def query(
+    request: QueryRequest,
+    http_request: Request,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+) -> QueryResponse:
+    settings: Settings = http_request.app.state.settings
+    if settings.api_key is not None and x_api_key != settings.api_key:
+        logger.warning(
+            "rejected request with missing or invalid API key",
+            extra={"event": "invalid_api_key"},
+        )
+        raise HTTPException(status_code=401, detail="Missing or invalid API key")
+
     rate_limiter: RateLimiter = http_request.app.state.rate_limiter
     client_key = http_request.client.host if http_request.client else "unknown"
     if not rate_limiter.allow(client_key):
@@ -72,5 +97,4 @@ def query(request: QueryRequest, http_request: Request) -> QueryResponse:
         )
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again shortly.")
 
-    settings: Settings = http_request.app.state.settings
     return api.generation.answer_question(request.question, request.language, settings)

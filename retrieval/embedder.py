@@ -21,7 +21,9 @@ def get_model() -> SentenceTransformer:
 
 
 def max_seq_length() -> int:
-    return get_model().max_seq_length
+    value = get_model().max_seq_length
+    assert value is not None, f"{MODEL_NAME} did not report a max_seq_length"
+    return value
 
 
 def tokenized_length(text: str) -> int:

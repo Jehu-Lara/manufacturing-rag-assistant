@@ -3,6 +3,7 @@ from __future__ import annotations
 import pickle
 import re
 from pathlib import Path
+from typing import Optional
 
 from rank_bm25 import BM25Okapi
 
@@ -15,6 +16,13 @@ from ingestion.metadata import ChunkMetadata
 PERSIST_FILE = Path(__file__).resolve().parent / "output" / "bm25_index.pkl"
 
 _TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
+
+# Loaded once per process and reused across queries — the persisted index is
+# immutable for the lifetime of a running server (rebuilt only by a separate
+# `build_index` run, which happens before the server starts, not while it's
+# serving traffic), so re-reading and un-pickling it on every /query request
+# was pure wasted I/O.
+_CACHE: Optional[tuple[list[str], BM25Okapi]] = None
 
 
 def tokenize(text: str) -> list[str]:
@@ -29,14 +37,20 @@ def build_index(chunks: list[ChunkMetadata]) -> None:
     PERSIST_FILE.parent.mkdir(parents=True, exist_ok=True)
     with PERSIST_FILE.open("wb") as f:
         pickle.dump({"chunk_ids": chunk_ids, "bm25": bm25}, f)
+    global _CACHE
+    _CACHE = None
 
 
 def _load() -> tuple[list[str], BM25Okapi]:
+    global _CACHE
+    if _CACHE is not None:
+        return _CACHE
     if not PERSIST_FILE.exists():
         raise FileNotFoundError(f"{PERSIST_FILE} not found — run `python -m retrieval.build_index` first")
     with PERSIST_FILE.open("rb") as f:
         data = pickle.load(f)
-    return data["chunk_ids"], data["bm25"]
+    _CACHE = (data["chunk_ids"], data["bm25"])
+    return _CACHE
 
 
 def query(text: str, top_n: int) -> list[tuple[str, float]]:

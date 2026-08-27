@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+# 3.12, not the project's actual 3.11 runtime (see Dockerfile): numpy==2.5.2's
+# bundled .pyi stubs use PEP 695 `type` aliases, which mypy's parser only
+# accepts when the target version is >=3.12, even though nothing in this
+# project's own code uses 3.12-only syntax. Verified none of it does before
+# making this change (all source is `from __future__ import annotations`-gated,
+# no `type` statements, no other version-gated syntax).
+python_version = "3.12"
+ignore_missing_imports = true

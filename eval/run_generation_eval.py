@@ -153,7 +153,8 @@ def build_report(rows: list[dict], version: str) -> str:
         "",
         "## Per-Question Results",
         "",
-        "| id | language | answerable (expected) | refused (actual) | status | confidence | threshold | retrieval_succeeded |",
+        "| id | language | answerable (expected) | refused (actual) | status | confidence | threshold "
+        "| retrieval_succeeded |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:

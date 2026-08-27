@@ -78,7 +78,7 @@ Writes `eval/reports/threshold_analysis_v<version>.md`. See `SPEC.md`'s Phase 3 
 
 ## Running the Generation API and UI Locally
 
-Requires `retrieval/output/` to already exist (run `python -m retrieval.build_index` first, above) and a `.env` file (copy `.env.example`) with at least a `GROQ_API_KEY` set (`OPENAI_API_KEY` is used as fallback only).
+Requires `retrieval/output/` to already exist (run `python -m retrieval.build_index` first, above) and a `.env` file (copy `.env.example`) with at least a `GROQ_API_KEY` set (`OPENAI_API_KEY` is used as fallback only). `API_KEY` is optional: if set, `/query` requires the same value in the request's `X-API-Key` header (the Streamlit UI reads and sends it automatically from its own environment); leave it unset for local development.
 
 Run the FastAPI backend:
 
@@ -126,3 +126,17 @@ pytest
 ```
 
 Covers: chunking correctness (target token band, overlap, section-boundary integrity), metadata completeness (every chunk has all required fields — see `ingestion/metadata.py`), corpus manifest consistency (every file in `corpus/SOURCES.md` exists, every corpus file is listed there with the correct public/synthetic label), the embedding model's fit against real corpus chunk sizes, hybrid retriever fusion correctness, eval-set integrity (hash, split, expected chunk IDs all exist), refusal threshold logic, LLM client JSON repair/retry/fallback behavior (provider SDKs mocked — no real LLM calls), generation orchestration and citation resolution, the FastAPI endpoints, and the Streamlit UI's pure logic functions.
+
+## Linting and Type-Checking
+
+```bash
+pip install ruff mypy
+ruff check .
+mypy api ingestion retrieval eval ui
+```
+
+Config lives in `pyproject.toml`. `mypy` is scoped to the application code, not `tests/`.
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push/PR to `master`: installs `requirements-lock.txt`, runs `ruff check .` and `mypy`, verifies the eval set's SHA-256 hash (`python -m eval.hash_eval_set --verify`), then runs the full `pytest` suite — including the real `bge-m3` model load in `tests/test_embedding_model_fits_corpus.py`, cached across runs via `actions/cache` to avoid re-downloading the ~2.3GB weights every time.

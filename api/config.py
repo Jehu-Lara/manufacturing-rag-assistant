@@ -26,6 +26,7 @@ class Settings:
     refusal_cosine_threshold: float
     log_level: str
     rate_limit_per_minute: int = _DEFAULT_RATE_LIMIT_PER_MINUTE
+    api_key: Optional[str] = None
 
 
 def load_settings() -> Settings:
@@ -67,6 +68,8 @@ def load_settings() -> Settings:
                 f"RATE_LIMIT_PER_MINUTE must be an int, got {rate_limit_raw!r}"
             ) from exc
 
+    api_key = os.environ.get("API_KEY") or None
+
     return Settings(
         groq_api_key=groq_api_key,
         openai_api_key=openai_api_key,
@@ -74,4 +77,5 @@ def load_settings() -> Settings:
         refusal_cosine_threshold=refusal_cosine_threshold,
         log_level=log_level,
         rate_limit_per_minute=rate_limit_per_minute,
+        api_key=api_key,
     )

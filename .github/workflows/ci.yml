@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements-lock.txt') }}
+
+      - name: Cache Hugging Face model cache (bge-m3, ~2.3GB)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-bge-m3-${{ runner.os }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-lock.txt
+          pip install ruff mypy
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type-check (mypy)
+        run: mypy api ingestion retrieval eval ui
+
+      - name: Verify eval set integrity
+        run: python -m eval.hash_eval_set --verify
+
+      - name: Run tests
+        run: pytest -v

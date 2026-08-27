@@ -149,6 +149,74 @@ def test_query_exceeding_rate_limit_returns_429(mock_answer_question, mock_load_
     assert third.status_code == 429
 
 
+@patch("api.main.load_settings")
+@patch("api.generation.answer_question")
+def test_query_with_configured_api_key_rejects_missing_header_with_401(mock_answer_question, mock_load_settings):
+    mock_load_settings.return_value = Settings(
+        groq_api_key="fake-key",
+        openai_api_key=None,
+        llm_provider="groq",
+        refusal_cosine_threshold=0.3,
+        log_level="INFO",
+        api_key="secret-key",
+    )
+    mock_answer_question.return_value = _answerable_response()
+
+    with _client() as client:
+        response = client.post("/query", json={"question": "What is the QC unit responsible for?", "language": "en"})
+
+    assert response.status_code == 401
+    mock_answer_question.assert_not_called()
+
+
+@patch("api.main.load_settings")
+@patch("api.generation.answer_question")
+def test_query_with_configured_api_key_rejects_wrong_header_with_401(mock_answer_question, mock_load_settings):
+    mock_load_settings.return_value = Settings(
+        groq_api_key="fake-key",
+        openai_api_key=None,
+        llm_provider="groq",
+        refusal_cosine_threshold=0.3,
+        log_level="INFO",
+        api_key="secret-key",
+    )
+    mock_answer_question.return_value = _answerable_response()
+
+    with _client() as client:
+        response = client.post(
+            "/query",
+            json={"question": "What is the QC unit responsible for?", "language": "en"},
+            headers={"X-API-Key": "wrong-key"},
+        )
+
+    assert response.status_code == 401
+    mock_answer_question.assert_not_called()
+
+
+@patch("api.main.load_settings")
+@patch("api.generation.answer_question")
+def test_query_with_configured_api_key_accepts_matching_header(mock_answer_question, mock_load_settings):
+    mock_load_settings.return_value = Settings(
+        groq_api_key="fake-key",
+        openai_api_key=None,
+        llm_provider="groq",
+        refusal_cosine_threshold=0.3,
+        log_level="INFO",
+        api_key="secret-key",
+    )
+    mock_answer_question.return_value = _answerable_response()
+
+    with _client() as client:
+        response = client.post(
+            "/query",
+            json={"question": "What is the QC unit responsible for?", "language": "en"},
+            headers={"X-API-Key": "secret-key"},
+        )
+
+    assert response.status_code == 200
+    mock_answer_question.assert_called_once()
+
+
 @patch("api.generation.answer_question")
 def test_query_unhandled_exception_returns_500_with_generic_body(mock_answer_question):
     mock_answer_question.side_effect = RuntimeError("index not built")

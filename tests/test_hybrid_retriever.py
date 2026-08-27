@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from retrieval.hybrid import RetrievalResult
-from retrieval.hybrid import _rrf_scores
-from retrieval.hybrid import _sort_fused_results
-from retrieval.hybrid import retrieve
+from retrieval.hybrid import RetrievalResult, _rrf_scores, _sort_fused_results, retrieve
 
 
 def _sorted_chunk_ids(results: list[RetrievalResult]) -> list[str]:

@@ -16,6 +16,7 @@ if str(_REPO_ROOT) not in sys.path:
 from api.messages import UI_LABELS  # noqa: E402
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+API_KEY = os.environ.get("API_KEY") or None
 EVAL_SET_PATH = _REPO_ROOT / "eval" / "eval_set.json"
 REQUEST_TIMEOUT_SECONDS = 60.0
 
@@ -61,9 +62,11 @@ def _submit(question: str, lang: str) -> None:
     st.session_state["last_response"] = None
     st.session_state["last_error"] = None
     try:
+        headers = {"X-API-Key": API_KEY} if API_KEY else {}
         response = httpx.post(
             f"{API_BASE_URL}/query",
             json={"question": question, "language": lang},
+            headers=headers,
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()

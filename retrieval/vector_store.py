@@ -41,7 +41,11 @@ def build_collection(chunks: list[ChunkMetadata]) -> None:
     embeddings = embed_texts(documents)
     metadatas = [_to_chroma_metadata(chunk) for chunk in chunks]
 
-    collection.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+    # chromadb's stub wants numpy-array embeddings and a narrower metadata
+    # value union than plain list[list[float]]/list[dict] give it; both are
+    # runtime-valid inputs chromadb accepts directly, just not what the stub
+    # states.
+    collection.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)  # type: ignore[arg-type]
 
 
 def get_collection():

@@ -31,6 +31,7 @@ Full stack in use across all three phases:
 - `streamlit run ui/streamlit_app.py` — run the UI locally; expects the backend already running, reads the `API_BASE_URL` env var (default `http://localhost:8000`).
 - `docker build -t rag4 .` / `docker run -p 7860:7860 rag4` — combined-container deploy build/run (FastAPI + Streamlit + nginx in one image). Not verified end-to-end in this repo's dev environment (Docker Desktop's WSL2 backend was unavailable) — review before relying on it for a real deploy.
 - `pytest` — run all tests.
+- `ruff check .` / `mypy api ingestion retrieval eval ui` — lint and type-check (config in `pyproject.toml`; `mypy` is scoped to application code, not `tests/`). `.github/workflows/ci.yml` runs both, plus the eval-set hash check and the full test suite, on every push/PR to `master`.
 
 ## Conventions
 

@@ -50,7 +50,10 @@ UI_LABELS: dict[str, dict[str, str]] = {
     },
     "es": {
         "title": "Asistente de Conocimiento de Manufactura",
-        "subtitle": "Haga preguntas sobre regulaciones de manufactura, procedimientos operativos y normas de seguridad.",
+        "subtitle": (
+            "Haga preguntas sobre regulaciones de manufactura, "
+            "procedimientos operativos y normas de seguridad."
+        ),
         "language_toggle_label": "Idioma",
         "question_input_label": "Su pregunta",
         "question_input_placeholder": "p. ej. ¿Cuáles son las responsabilidades de la unidad de control de calidad?",

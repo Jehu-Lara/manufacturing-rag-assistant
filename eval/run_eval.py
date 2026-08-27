@@ -53,7 +53,9 @@ def _format_result_line(result) -> str:
     )
 
 
-def build_report(questions: list[dict], answerable_rows: list[dict], unanswerable_rows: list[dict], version: str) -> str:
+def build_report(
+    questions: list[dict], answerable_rows: list[dict], unanswerable_rows: list[dict], version: str
+) -> str:
     recall_at_3 = sum(row["recall@3"] for row in answerable_rows) / len(answerable_rows)
     recall_at_5 = sum(row["recall@5"] for row in answerable_rows) / len(answerable_rows)
     mrr = metrics.mean_reciprocal_rank([row["rr"] for row in answerable_rows])
@@ -81,9 +83,9 @@ def build_report(questions: list[dict], answerable_rows: list[dict], unanswerabl
         f"# Retrieval Evaluation Report — eval_set v{version}",
         "",
         f"- Embedding model: `{MODEL_NAME}`",
-        f"- Fusion: Reciprocal Rank Fusion (k=60)",
+        "- Fusion: Reciprocal Rank Fusion (k=60)",
         f"- Git commit: `{_git_commit_hash()}`",
-        f"- Eval set SHA-256: verified against stored hash before running",
+        "- Eval set SHA-256: verified against stored hash before running",
         "",
         "## Summary Metrics (answerable subset, n=%d)" % len(answerable_rows),
         "",
