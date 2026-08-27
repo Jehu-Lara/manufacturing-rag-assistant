@@ -11,11 +11,27 @@ retrieval, LLM-call, and completion log lines beyond the manually-generated
 
 `src/core/logging.py`'s `JsonFormatter` reads the active OpenTelemetry
 span's trace id (via `opentelemetry.trace.get_current_span()`) into a
-`trace_id` log field whenever a valid span context exists — a no-op
-(verified directly: `get_span_context().is_valid` is `False` with no
-tracer configured) until spans are actually created. `src/core/telemetry.py`
-provides `configure_tracing(app)` as the FastAPI instrumentation entry
-point; `src/adapters/primary/http/app.py`'s `create_app()` calls it.
+`trace_id` log field whenever a valid span context exists. `src/core/telemetry.py`'s
+`configure_tracing(app)` sets up a real `TracerProvider` (called once from
+`create_app()`; idempotent — a second call is a documented no-op, since
+OTel itself silently ignores a second `set_tracer_provider` in the same
+process) and, only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, adds an OTLP
+exporter — unset, spans are still created (so `trace_id` still populates)
+but never leave the process.
+
+Three named spans are created via `get_tracer().start_as_current_span(...)`:
+`retrieval.hybrid.query` (`HybridRetriever.retrieve`), `embedder.compute`
+(`SentenceTransformersEmbedder.embed_texts`), and `llm.generate`
+(`GroqOpenAiLlmClient.generate_structured`), all nested under one outer
+`query.answer_question` span opened in `QueryUseCase.answer_question` —
+verified this nesting survives the `asyncio.to_thread` boundary the
+retriever call crosses, since `asyncio.to_thread` copies the current
+`contextvars.Context` (which is how OTel tracks the active span) to its
+worker thread, per the stdlib's own documented behavior. Tests
+(`tests/test_core_telemetry.py`) verify each span name via a mocked
+tracer, not a real exporter — mutating the process-global
+`TracerProvider` per-test isn't reliable (same silent-second-call
+behavior noted above).
 
 ## Consequences
 

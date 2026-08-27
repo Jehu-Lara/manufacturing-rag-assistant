@@ -10,6 +10,7 @@ import openai
 
 from src.core.config import Settings
 from src.core.errors import GenerationError
+from src.core.telemetry import get_tracer
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,12 @@ class GroqOpenAiLlmClient:
     other in-flight request under a single-process/single-worker deploy."""
 
     async def generate_structured(
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
+    ) -> dict[str, Any]:
+        with get_tracer().start_as_current_span("llm.generate"):
+            return await self._generate_structured_impl(system_prompt, user_prompt, schema, settings)
+
+    async def _generate_structured_impl(
         self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
     ) -> dict[str, Any]:
         primary = settings.llm_provider

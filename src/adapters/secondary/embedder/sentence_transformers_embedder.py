@@ -4,6 +4,8 @@ from typing import Optional, cast
 
 from sentence_transformers import SentenceTransformer
 
+from src.core.telemetry import get_tracer
+
 MODEL_NAME = "BAAI/bge-m3"
 
 
@@ -48,8 +50,9 @@ class SentenceTransformersEmbedder:
             )
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        embeddings = self._get_model().encode(texts, show_progress_bar=False, normalize_embeddings=True)
-        return cast("list[list[float]]", embeddings.tolist())
+        with get_tracer().start_as_current_span("embedder.compute"):
+            embeddings = self._get_model().encode(texts, show_progress_bar=False, normalize_embeddings=True)
+            return cast("list[list[float]]", embeddings.tolist())
 
     def embed_query(self, text: str) -> list[float]:
         return self.embed_texts([text])[0]

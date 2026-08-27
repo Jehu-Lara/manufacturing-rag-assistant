@@ -7,6 +7,7 @@ import uuid
 
 from src.core.config import Settings
 from src.core.errors import GenerationError
+from src.core.telemetry import get_tracer
 from src.domain.models import Language, QueryAnswer
 from src.domain.policies import CitationResolver, RefusalPolicy
 from src.domain.ports import LLMClientPort, RetrieverPort
@@ -46,6 +47,15 @@ class QueryUseCase:
         self._refusal_policy = RefusalPolicy(settings.refusal_cosine_threshold)
 
     async def answer_question(self, question: str, language: Language) -> QueryAnswer:
+        """Outer span correlating retrieval.hybrid.query/embedder.compute/
+        llm.generate (see ADR-006) under one trace — asyncio.to_thread copies
+        the current contextvars context to its worker thread (per the
+        stdlib docs), so the retriever's child span still nests correctly
+        even though retrieve() runs off the event loop."""
+        with get_tracer().start_as_current_span("query.answer_question"):
+            return await self._answer_question_impl(question, language)
+
+    async def _answer_question_impl(self, question: str, language: Language) -> QueryAnswer:
         request_id = str(uuid.uuid4())
         start_time = time.monotonic()
 

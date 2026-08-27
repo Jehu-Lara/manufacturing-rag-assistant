@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.core.telemetry import get_tracer
 from src.domain.models import RetrievalResult
 from src.domain.policies import fuse_rankings
 from src.domain.ports import LexicalIndexPort, VectorStorePort
@@ -25,32 +26,33 @@ class HybridRetriever:
         self._lexical_index = lexical_index
 
     def retrieve(self, query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[RetrievalResult]:
-        semantic_hits = self._vector_store.query(query_text, top_n)
-        bm25_hits = self._lexical_index.query(query_text, top_n)
+        with get_tracer().start_as_current_span("retrieval.hybrid.query"):
+            semantic_hits = self._vector_store.query(query_text, top_n)
+            bm25_hits = self._lexical_index.query(query_text, top_n)
 
-        semantic_by_id = {
-            chunk_id: (rank, score, metadata)
-            for rank, (chunk_id, score, metadata) in enumerate(semantic_hits, start=1)
-        }
-        bm25_by_id = {chunk_id: (rank, score) for rank, (chunk_id, score) in enumerate(bm25_hits, start=1)}
+            semantic_by_id = {
+                chunk_id: (rank, score, metadata)
+                for rank, (chunk_id, score, metadata) in enumerate(semantic_hits, start=1)
+            }
+            bm25_by_id = {chunk_id: (rank, score) for rank, (chunk_id, score) in enumerate(bm25_hits, start=1)}
 
-        fused_pairs = fuse_rankings(list(semantic_by_id.keys()), list(bm25_by_id.keys()))
+            fused_pairs = fuse_rankings(list(semantic_by_id.keys()), list(bm25_by_id.keys()))
 
-        fused: list[RetrievalResult] = []
-        for chunk_id, fused_score in fused_pairs:
-            sem = semantic_by_id.get(chunk_id)
-            bm = bm25_by_id.get(chunk_id)
-            metadata = sem[2] if sem else self._vector_store.get_metadata(chunk_id)
-            fused.append(
-                RetrievalResult(
-                    chunk_id=chunk_id,
-                    fused_score=fused_score,
-                    semantic_rank=sem[0] if sem else None,
-                    semantic_score=sem[1] if sem else None,
-                    bm25_rank=bm[0] if bm else None,
-                    bm25_score=bm[1] if bm else None,
-                    metadata=metadata,
+            fused: list[RetrievalResult] = []
+            for chunk_id, fused_score in fused_pairs:
+                sem = semantic_by_id.get(chunk_id)
+                bm = bm25_by_id.get(chunk_id)
+                metadata = sem[2] if sem else self._vector_store.get_metadata(chunk_id)
+                fused.append(
+                    RetrievalResult(
+                        chunk_id=chunk_id,
+                        fused_score=fused_score,
+                        semantic_rank=sem[0] if sem else None,
+                        semantic_score=sem[1] if sem else None,
+                        bm25_rank=bm[0] if bm else None,
+                        bm25_score=bm[1] if bm else None,
+                        metadata=metadata,
+                    )
                 )
-            )
 
-        return fused[:k]
+            return fused[:k]
