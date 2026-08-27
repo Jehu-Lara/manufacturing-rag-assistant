@@ -1,0 +1,120 @@
+[
+  {
+    "case": "health_normal",
+    "request": {
+      "method": "GET",
+      "path": "/health"
+    },
+    "response_json": {
+      "embedding_model": "BAAI/bge-m3",
+      "index_loaded": true,
+      "llm_provider_primary": "groq",
+      "status": "ok"
+    },
+    "response_status": 200
+  },
+  {
+    "case": "health_degraded",
+    "request": {
+      "method": "GET",
+      "path": "/health"
+    },
+    "response_json": {
+      "embedding_model": "BAAI/bge-m3",
+      "index_loaded": false,
+      "llm_provider_primary": "groq",
+      "status": "ok"
+    },
+    "response_status": 200
+  },
+  {
+    "case": "query_confident",
+    "request": {
+      "json": {
+        "language": "en",
+        "question": "What is the QC unit responsible for?"
+      },
+      "method": "POST",
+      "path": "/query"
+    },
+    "response_json": {
+      "answer": "The QC unit is responsible for approving or rejecting components.",
+      "citations": [
+        {
+          "chunk_id": "chunk-abc",
+          "document_id": "doc-real",
+          "document_title": "Real Retrieved Title",
+          "revision": "Rev Z",
+          "section_heading": "Real Section"
+        }
+      ],
+      "confidence": 0.9,
+      "language": "en",
+      "refused": false,
+      "request_id": "00000000-0000-0000-0000-000000000000",
+      "status": "ok",
+      "threshold": 0.3
+    },
+    "response_status": 200
+  },
+  {
+    "case": "query_refused",
+    "request": {
+      "json": {
+        "language": "en",
+        "question": "What's the weather today?"
+      },
+      "method": "POST",
+      "path": "/query"
+    },
+    "response_json": {
+      "answer": "I don't have enough information in the available documents to answer this confidently. Try rephrasing your question with more specific terms, or consult a subject-matter expert for a definitive answer.",
+      "citations": [],
+      "confidence": 0.1,
+      "language": "en",
+      "refused": true,
+      "request_id": "00000000-0000-0000-0000-000000000000",
+      "status": "ok",
+      "threshold": 0.7
+    },
+    "response_status": 200
+  },
+  {
+    "case": "query_generation_error",
+    "request": {
+      "json": {
+        "language": "en",
+        "question": "What is the QC unit responsible for?"
+      },
+      "method": "POST",
+      "path": "/query"
+    },
+    "response_json": {
+      "answer": "A technical error occurred while generating this answer. This is not a refusal due to insufficient information \u2014 please try again in a moment.",
+      "citations": [],
+      "confidence": 0.9,
+      "language": "en",
+      "refused": false,
+      "request_id": "00000000-0000-0000-0000-000000000000",
+      "status": "error",
+      "threshold": 0.3
+    },
+    "response_status": 200
+  },
+  {
+    "case": "query_unhandled_exception_500",
+    "request": {
+      "json": {
+        "language": "en",
+        "question": "What is the QC unit responsible for?"
+      },
+      "method": "POST",
+      "path": "/query"
+    },
+    "response_json": {
+      "detail": "internal server error",
+      "status": "error"
+    },
+    "response_status": 500
+  }
+]
