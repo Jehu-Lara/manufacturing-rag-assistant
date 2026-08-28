@@ -42,5 +42,10 @@ jobs:
       - name: Verify eval set integrity
         run: python -m src.features.evaluation.eval_set_integrity --verify
 
+      - name: Build real corpus artifacts (chunks + retrieval index)
+        run: |
+          python -m src.features.ingestion.cli
+          python -m src.features.retrieval.cli
+
       - name: Run tests
         run: pytest -v
