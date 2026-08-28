@@ -43,7 +43,7 @@ def run() -> list[ChunkMetadata]:
     for document in documents:
         all_chunks.extend(build_chunks_for_document(document, counter))
 
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with OUTPUT_FILE.open("w", encoding="utf-8") as f:
         for chunk in all_chunks:
             f.write(json.dumps(chunk.to_dict(), ensure_ascii=False) + "\n")
