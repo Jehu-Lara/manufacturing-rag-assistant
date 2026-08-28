@@ -33,7 +33,7 @@ Python 3.11 is the production and CI target.
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # Linux/macOS: source .venv/bin/activate
-pip install -r requirements-lock.txt
+pip install -r requirements-lock.txt --extra-index-url https://download.pytorch.org/whl/cpu
 pip install -e . --no-deps
 ```
 

@@ -29,7 +29,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements-lock.txt
+          pip install -r requirements-lock.txt --extra-index-url https://download.pytorch.org/whl/cpu
           pip install -e . --no-deps
           pip install ruff mypy
 
