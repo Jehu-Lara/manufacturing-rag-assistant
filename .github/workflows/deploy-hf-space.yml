@@ -1,0 +1,101 @@
+name: Deploy HF Space
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Full 40-character commit SHA from origin/master
+        required: true
+        type: string
+      confirm:
+        description: Type DEPLOY to confirm the destructive mirror upload
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: hf-live-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: hf-live
+    env:
+      HF_REPO_ID: JehuLara/manufacturing-rag-assistant-live
+      HF_OIDC_RESOURCE: spaces/JehuLara/manufacturing-rag-assistant-live
+    steps:
+      - name: Validate confirmation and SHA format
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          test "$CONFIRM" = "DEPLOY"
+          [[ "$TARGET_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+
+      - name: Check out selected commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ inputs.git_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate commit ancestry and successful CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.git_sha }}
+        run: |
+          git fetch --no-tags origin master
+          git cat-file -e "${TARGET_SHA}^{commit}"
+          git merge-base --is-ancestor "$TARGET_SHA" origin/master
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${TARGET_SHA}&status=completed&per_page=100" \
+            | jq -e --arg sha "$TARGET_SHA" \
+              '.workflow_runs | any(.name == "CI" and .head_sha == $sha and .conclusion == "success")'
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned Hugging Face CLI
+        run: python -m pip install --disable-pip-version-check huggingface_hub==1.29.0
+
+      - name: Build allowlisted staging directory
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+        run: |
+          mkdir staging
+          cp -R src corpus staging/
+          install -m 0644 Dockerfile requirements-lock.txt nginx.conf LICENSE staging/
+          install -m 0755 start.sh staging/start.sh
+          install -m 0644 deploy/hf-space/README.md staging/README.md
+          printf '%s\n' "$TARGET_SHA" > staging/DEPLOYED_SHA
+          date -u +'%Y-%m-%dT%H:%M:%SZ' > staging/DEPLOYED_AT
+
+      - name: Verify staging allowlist
+        run: |
+          test -f staging/README.md
+          test -f staging/DEPLOYED_SHA
+          test -f staging/DEPLOYED_AT
+          test ! -e staging/.git
+          test ! -e staging/.github
+          test ! -e staging/tests
+          test ! -e staging/docs
+          test ! -e staging/eval
+          test ! -e staging/.env
+
+      - name: Mirror selected commit to Hugging Face Space
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+        run: >-
+          hf upload "$HF_REPO_ID" ./staging .
+          --repo-type space
+          --delete '*'
+          --commit-message "Deploy ${TARGET_SHA::7}"

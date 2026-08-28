@@ -1,11 +1,49 @@
 #!/usr/bin/env bash
+set -Eeuo pipefail
+
+uvicorn src.main:app --host 127.0.0.1 --port 8000 &
+api_pid=$!
+
+streamlit run src/web/app.py \
+    --server.port 8501 \
+    --server.address 127.0.0.1 \
+    --server.headless true &
+web_pid=$!
+
+# nginx.conf's pid directive is rewritten to /tmp/nginx.pid at build time.
+nginx -g "daemon off;" &
+nginx_pid=$!
+
+shutting_down=0
+
+shutdown() {
+    local status="$1"
+    if (( shutting_down )); then
+        return
+    fi
+    shutting_down=1
+    trap - TERM INT
+
+    for pid in "$api_pid" "$web_pid" "$nginx_pid"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null || true
+        fi
+    done
+    wait "$api_pid" "$web_pid" "$nginx_pid" 2>/dev/null || true
+    exit "$status"
+}
+
+trap 'shutdown 143' TERM
+trap 'shutdown 130' INT
+
+set +e
+wait -n "$api_pid" "$web_pid" "$nginx_pid"
+status=$?
 set -e
 
-uvicorn src.main:app --host 0.0.0.0 --port 8000 &
-streamlit run src/web/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true &
-# nginx.conf's `pid` directive is rewritten to /tmp/nginx.pid at build time
-# (see the sed step in Dockerfile) so nginx can write its pid file as uid 1000.
-nginx -g "daemon off;" &
-
-wait -n
-exit $?
+# Any child exit leaves the combined service incomplete. A clean child exit
+# is still unexpected and must fail the container.
+if (( status == 0 )); then
+    status=1
+fi
+shutdown "$status"

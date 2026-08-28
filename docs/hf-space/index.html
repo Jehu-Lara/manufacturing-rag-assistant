@@ -119,7 +119,7 @@
 
   <div class="status-banner">
     <span class="status-dot"></span>
-    <span><strong>Live demo:</strong> deployment in progress — Oracle Cloud's Always Free ARM tier hit a temporary regional capacity limit. This page will be updated with the live link as soon as it's up. In the meantime, everything below reflects the real, tested system — see the <a href="https://github.com/Jehu-Lara/manufacturing-rag-assistant">GitHub repo</a> for full source, tests, and eval reports.</span>
+    <span><strong>Live demo:</strong> deployment in progress — the interactive app is being stood up as a Hugging Face PRO Docker Space (amd64, CPU Basic). This page will be updated with the live link as soon as it's up. In the meantime, everything below reflects the real, tested system — see the <a href="https://github.com/Jehu-Lara/manufacturing-rag-assistant">GitHub repo</a> for full source, tests, and eval reports.</span>
   </div>
 
   <section>
@@ -291,7 +291,7 @@
       <p><strong>Generation:</strong> Groq (<code>openai/gpt-oss-120b</code>) primary, OpenAI <code>gpt-4o-mini</code> fallback, structured JSON output with schema validation and repair-retry.</p>
       <p><strong>Backend:</strong> FastAPI, Pydantic, rate limiting, structured JSON logging.</p>
       <p><strong>Frontend:</strong> Streamlit, bilingual (EN/ES) toggle.</p>
-      <p><strong>Deploy:</strong> single Docker image (nginx + uvicorn + Streamlit), targeting Oracle Cloud's Always Free Ampere A1 (ARM) tier — ARM64 wheel compatibility verified for every native dependency before provisioning.</p>
+      <p><strong>Deploy:</strong> single Docker image (nginx + uvicorn + Streamlit), targeting a Hugging Face PRO Docker Space (amd64, CPU Basic) — the retrieval index is immutable data baked into the image at build time, not runtime-persisted state.</p>
       <p style="margin-bottom:0;"><strong>Tests:</strong> 168 passing — ingestion, retrieval, eval metrics, and generation orchestration are real integration tests against real models/indexes; only live third-party LLM API calls are mocked, for cost and determinism.</p>
     </div>
   </section>

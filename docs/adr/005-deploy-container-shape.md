@@ -1,5 +1,11 @@
 # ADR-005: Deploy/container shape — current reality vs. deferred split
 
+> **Partially superseded by ADR-007 (2026-08-28)** — the deploy target
+> reverted from Oracle Cloud back to Hugging Face (now a paid PRO Docker
+> Space, not the free tier this ADR's Oracle-era text describes). This ADR's
+> Oracle-era content below is kept as historical record, unedited; see
+> ADR-007 for the current decision.
+
 ## Context
 
 **Correction (recorded after this ADR's first version): the deploy target

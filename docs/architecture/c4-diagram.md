@@ -11,7 +11,7 @@ the migration plan's Phase 4b appendix). The diagrams below reflect that:
 graph TB
     operator["Operator / demo visitor<br/>(browser)"]
 
-    subgraph container["Single Docker container (verified locally; Oracle VM target, port 7860)"]
+    subgraph container["Single Docker container (verified locally; Hugging Face Docker Space target, amd64, port 7860)"]
         nginx["nginx<br/>reverse proxy"]
         streamlit["Streamlit process<br/>src/web/app.py"]
         api["FastAPI process<br/>src.main:app (uvicorn)"]
@@ -23,8 +23,8 @@ graph TB
 
     operator -->|HTTPS| nginx
     nginx -->|"/ (websocket)"| streamlit
-    nginx -->|"/query, /health, /ready"| api
-    streamlit -->|"httpx, HTTP-only"| nginx
+    nginx -->|"public /health, /ready"| api
+    streamlit -->|"loopback /query + API key"| api
     api --> chroma
     api --> bm25
     api -->|"structured generation"| llm
@@ -105,8 +105,8 @@ graph TB
     apionly --> volume
 ```
 
-Not implemented: deliberately deferred until an Oracle Ampere A1 VM can be
-provisioned and the real target environment can be tested. Oracle supports
-multi-service compose and persistent volumes; regional ARM capacity, not a
-hosting constraint, is the current blocker. The exact split remains a human
-decision after provisioning, per ADR-005.
+Not implemented, and — as of ADR-007 (2026-08-28) — permanently out of scope
+for the current deploy target: Hugging Face Docker Spaces expose exactly one
+port and run exactly one container, with no `docker-compose` support at all.
+Reopening this split would require leaving HF Spaces for a different host
+(e.g. a VM), not just waiting out a capacity limit.

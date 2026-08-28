@@ -11,7 +11,7 @@ See [`SPEC.md`](SPEC.md) for the complete scope, decisions, measured limitations
 - Generation/API/UI: implemented and tested — FastAPI, Streamlit, Groq (`openai/gpt-oss-120b`) with OpenAI (`gpt-4o-mini`) fallback, bilingual responses, deterministic refusal gate, and citations resolved from retrieved metadata.
 - Evaluation: correct-refusal 0.900 (passes), false-refusal 0.200 (documented exception), citation accuracy 23/30 = 0.767 (below target), and faithfulness 29/30 = 0.967 (passes). The citation and faithfulness verdicts are human-reviewed, not LLM-as-judge scores.
 - Public showcase: live as a free [Hugging Face Static Space](https://huggingface.co/spaces/JehuLara/manufacturing-rag-assistant). It is a portfolio page only and does not run the RAG.
-- Interactive deployment: Oracle Cloud Always Free Ampere A1 (ARM) is the intended runtime. Provisioning is currently blocked by Oracle's regional ARM capacity in Monterrey; no live interactive deployment exists yet.
+- Interactive deployment: a second, separate Hugging Face PRO Docker Space (amd64, CPU Basic), published manually from a selected green `master` commit through a keyless GitHub Actions workflow. Oracle Cloud was the intended runtime until 2026-08-28, when it was abandoned after remaining blocked on regional ARM capacity — see [`docs/adr/007-hf-pro-docker-space-deploy.md`](docs/adr/007-hf-pro-docker-space-deploy.md). No live interactive deployment exists yet.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ All application code lives under `src/` as a modular monolith with ports and ada
 - `src/web/`: Streamlit UI, communicating with the backend over HTTP only.
 - `src/main.py`: FastAPI composition root.
 
-The currently verified Docker image runs nginx on port 7860, FastAPI on 8000, and Streamlit on 8501 in one container. Splitting API and web into separate containers is explicitly deferred until an Oracle VM exists; see [`docs/adr/005-deploy-container-shape.md`](docs/adr/005-deploy-container-shape.md).
+The Docker image runs nginx on public port 7860, with FastAPI on loopback port 8000 and Streamlit on loopback port 8501 in one container. Only `/`, `/health`, and `/ready` are public; nginx returns 404 for `/query`, `/docs`, and `/openapi.json`, while Streamlit calls `/query` directly over loopback. This shape is a structural requirement of the Hugging Face Docker Space deploy target — see [`docs/adr/007-hf-pro-docker-space-deploy.md`](docs/adr/007-hf-pro-docker-space-deploy.md).
 
 ## Setup
 
@@ -80,7 +80,9 @@ docker build -t rag4 .
 docker run --env-file .env -p 7860:7860 rag4
 ```
 
-The amd64 image was verified end to end with a real build and run. nginx correctly proxies `/health`, `/ready`, and `/query`; `/ready` reported `index_loaded: true` against the baked-in real index. ARM64 dependency wheels and a long-running QEMU build were verified, but a complete native ARM build/run remains pending until Oracle capacity is available.
+An earlier amd64 image was built and run end to end, but that result does not approve the hardened Dockerfile in the current deployment change. A fresh build, resource measurement, shutdown test, external route test, and bilingual query test remain required before promotion. amd64 is the real deploy target; the earlier ARM64 work remains only as historical record in `SPEC.md`.
+
+**Hugging Face deployment:** create `JehuLara/manufacturing-rag-assistant-live` manually as a public Docker Space on CPU Basic, configure the repo-scoped Trusted Publisher and the `hf-live` GitHub Environment, then invoke `deploy-hf-space.yml` with a full 40-character green SHA and exact confirmation `DEPLOY`. The workflow stages an allowlist, writes deployment provenance, and intentionally mirrors it with deletion enabled. Runtime secrets belong only in HF Settings: `GROQ_API_KEY`, `OPENAI_API_KEY`, and `API_KEY`.
 
 ## Quality gates
 

@@ -7,6 +7,7 @@ from sentence_transformers import SentenceTransformer
 from src.core.telemetry import get_tracer
 
 MODEL_NAME = "BAAI/bge-m3"
+MODEL_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
 
 
 class SentenceTransformersEmbedder:
@@ -14,14 +15,15 @@ class SentenceTransformersEmbedder:
     instance (not a module-level global) — one instance is constructed once
     in the composition root and reused for the process lifetime."""
 
-    def __init__(self, model_name: str = MODEL_NAME) -> None:
+    def __init__(self, model_name: str = MODEL_NAME, model_revision: str = MODEL_REVISION) -> None:
         self._model_name = model_name
+        self._model_revision = model_revision
         self._model: Optional[SentenceTransformer] = None
 
     def _get_model(self) -> SentenceTransformer:
         if self._model is None:
             try:
-                self._model = SentenceTransformer(self._model_name)
+                self._model = SentenceTransformer(self._model_name, revision=self._model_revision)
             except Exception as exc:
                 raise RuntimeError(
                     f"failed to load embedding model '{self._model_name}' — "
