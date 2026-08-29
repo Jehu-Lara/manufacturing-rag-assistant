@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+import os
+import re
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from src.adapters.secondary.embedder import sentence_transformers_embedder as embedder_module
@@ -89,6 +97,12 @@ def test_only_nginx_is_public_and_internal_api_routes_are_hidden():
     assert "--server.address 127.0.0.1" in start
     assert "wait -n" in start
     assert "trap 'shutdown 143' TERM" in start
+    # Streamlit must launch via `python -m streamlit`, never the bare console
+    # script: only `-m` puts the container WORKDIR on sys.path for the app's
+    # `from src.web import client`. Behaviourally guarded by
+    # test_streamlit_ui_executes_from_repo_root_without_pythonpath.
+    assert "python -m streamlit run src/web/app.py" in start
+    assert re.search(r"(?<!python -m )streamlit run", start) is None
 
 
 def test_manual_oidc_deployment_is_sha_gated_and_allowlisted():
@@ -163,3 +177,70 @@ def test_space_card_declares_docker_cpu_basic_contract():
     assert "license: mit" in card
     assert "suggested_hardware: cpu-basic" in card
     assert "BAAI/bge-m3" in card
+
+
+def test_streamlit_ui_executes_from_repo_root_without_pythonpath(tmp_path):
+    """Boot the UI exactly as the container's start.sh does -- `python -m
+    streamlit` (so `-m` puts the CWD on sys.path, the whole point of the
+    d4c681d fix), CWD = repo root, PYTHONPATH stripped -- then hit
+    /_stcore/script-health-check. That endpoint actually runs app.py and
+    returns 503 if it raises, so a ModuleNotFoundError, a broken import in the
+    src.web chain, or an exception in main() on a no-backend cold start all
+    fail here (plain /_stcore/health would not -- it only reports the server
+    is up)."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+
+    log_path = tmp_path / "streamlit.log"
+    log = log_path.open("wb")
+    proc = subprocess.Popen(
+        [
+            sys.executable, "-m", "streamlit", "run", "src/web/app.py",
+            "--server.port", str(port),
+            "--server.address", "127.0.0.1",
+            "--server.headless", "true",
+            # Hidden/experimental Streamlit option, pinned via requirements-lock.txt:
+            # without it the route 404s to the SPA catch-all (a misleading 200).
+            "--server.scriptHealthCheckEnabled", "true",
+        ],
+        cwd=ROOT,
+        env=env,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+    )
+    log.close()
+    last: tuple[int, str] | None = None
+    try:
+        url = f"http://127.0.0.1:{port}/_stcore/script-health-check"
+        deadline = time.monotonic() + 90
+        while time.monotonic() < deadline and proc.poll() is None:
+            try:
+                with urllib.request.urlopen(url, timeout=20) as response:
+                    last = (response.status, response.read(120).decode("utf-8", "replace"))
+                    break
+            except urllib.error.HTTPError as exc:
+                # The endpoint responded -- it ran the script. Any status is a
+                # verdict (503 "error"/"timeout"), so stop; no point retrying.
+                last = (exc.code, exc.read(120).decode("utf-8", "replace"))
+                break
+            except (urllib.error.URLError, OSError):
+                # Server not accepting connections yet -- keep polling.
+                time.sleep(0.5)
+
+        output = log_path.read_text(encoding="utf-8", errors="replace")
+        assert "ModuleNotFoundError" not in output, output
+        assert last is not None, f"script-health-check never responded on :{port}\n{output}"
+        assert last == (200, "ok"), f"script-health-check returned {last}\n{output}"
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=15)
+
+    assert proc.returncode is not None

@@ -4,7 +4,11 @@ set -Eeuo pipefail
 uvicorn src.main:app --host 127.0.0.1 --port 8000 &
 api_pid=$!
 
-streamlit run src/web/app.py \
+# `python -m streamlit`, not the `streamlit` console script: only `-m` puts the
+# WORKDIR (/app) on sys.path, which the app's `from src.web import client` needs
+# (the project is not pip-installed in the image). The console script would leave
+# only src/web/ on the path and the UI would crash with ModuleNotFoundError.
+python -m streamlit run src/web/app.py \
     --server.port 8501 \
     --server.address 127.0.0.1 \
     --server.headless true &
