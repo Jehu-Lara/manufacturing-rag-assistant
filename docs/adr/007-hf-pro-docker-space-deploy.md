@@ -110,6 +110,13 @@ The upload staging allowlist is:
 - the Space card as root `README.md`
 - generated `DEPLOYED_SHA` and `DEPLOYED_AT`
 
+Before upload, the workflow compares the exact top-level staging entries to
+this allowlist, recursively rejects symlinks, nested `.git` directories,
+private-key filenames and `.env*` files, then runs checksum-pinned Gitleaks
+against the final directory with recursive archive and encoding inspection.
+Runtime, CI and release-tool installations all use separate SHA-256 lock files
+with `--require-hashes`.
+
 The workflow mirrors staging with `hf upload ... --repo-type space --delete '*'`.
 Deletion is intentional and bounded by the allowlist, Environment, exact manual
 confirmation, serialized deployment, and green selected SHA.

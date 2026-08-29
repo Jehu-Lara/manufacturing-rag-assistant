@@ -33,7 +33,7 @@ Python 3.11 is the production and CI target.
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # Linux/macOS: source .venv/bin/activate
-pip install -r requirements-lock.txt --extra-index-url https://download.pytorch.org/whl/cpu
+pip install --require-hashes -r requirements-lock.txt --extra-index-url https://download.pytorch.org/whl/cpu
 pip install -e . --no-deps
 ```
 
@@ -82,7 +82,7 @@ docker run --env-file .env -p 7860:7860 rag4
 
 An earlier amd64 image was built and run end to end, but that result does not approve the hardened Dockerfile in the current deployment change. A fresh build, resource measurement, shutdown test, external route test, and bilingual query test remain required before promotion. amd64 is the real deploy target; the earlier ARM64 work remains only as historical record in `SPEC.md`.
 
-**Hugging Face deployment:** create `JehuLara/manufacturing-rag-assistant-live` manually as a public Docker Space on CPU Basic, configure the repo-scoped Trusted Publisher and the `hf-live` GitHub Environment, then invoke `deploy-hf-space.yml` with a full 40-character green SHA and exact confirmation `DEPLOY`. The workflow stages an allowlist, writes deployment provenance, and intentionally mirrors it with deletion enabled. Runtime secrets belong only in HF Settings: `GROQ_API_KEY`, `OPENAI_API_KEY`, and `API_KEY`.
+**Hugging Face deployment:** create `JehuLara/manufacturing-rag-assistant-live` manually as a public Docker Space on CPU Basic, configure the repo-scoped Trusted Publisher and the `hf-live` GitHub Environment, then invoke `deploy-hf-space.yml` with a full 40-character green SHA and exact confirmation `DEPLOY`. The workflow stages an allowlist, rejects nested secret-like paths and symlinks, scans the final staging tree with a checksum-pinned Gitleaks binary, writes deployment provenance, and intentionally mirrors it with deletion enabled. Runtime secrets belong only in HF Settings: `GROQ_API_KEY`, `OPENAI_API_KEY`, and `API_KEY`. Questions and retrieved context are sent to the selected external LLM provider, so the UI warns users not to submit confidential, personal, regulated, or proprietary information.
 
 ## Quality gates
 

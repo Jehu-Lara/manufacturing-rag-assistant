@@ -110,7 +110,7 @@ class QueryUseCase:
                     "request_id": request_id,
                     "event": "generation_error",
                     "language": language,
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
                 },
             )
             answer = QueryAnswer(

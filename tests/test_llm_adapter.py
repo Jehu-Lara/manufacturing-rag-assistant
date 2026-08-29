@@ -8,7 +8,7 @@ import groq
 import httpx
 import pytest
 
-from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient
+from src.adapters.secondary.llm.groq_openai_client import MAX_COMPLETION_TOKENS, GroqOpenAiLlmClient
 from src.core.config import Settings
 from src.core.errors import GenerationError
 from src.features.query.prompts import JSON_SCHEMA
@@ -208,3 +208,46 @@ def test_openai_as_primary_provider_used_when_configured(mock_groq_cls, mock_ope
     assert result == VALID_PAYLOAD
     assert mock_openai_cls.return_value.chat.completions.create.await_count == 1
     mock_groq_cls.assert_not_called()
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_provider_calls_enforce_completion_token_limit(mock_groq_cls, mock_openai_cls):
+    mock_groq_cls.return_value = _async_client_with_create(
+        _response(INVALID_JSON_TEXT), _response(INVALID_JSON_TEXT), side_effect=True
+    )
+    mock_openai_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
+
+    _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+
+    for call in mock_groq_cls.return_value.chat.completions.create.await_args_list:
+        assert call.kwargs["max_completion_tokens"] == MAX_COMPLETION_TOKENS
+    assert mock_openai_cls.return_value.chat.completions.create.await_args.kwargs["max_completion_tokens"] == (
+        MAX_COMPLETION_TOKENS
+    )
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_unconfigured_fallback_is_skipped_instead_of_receiving_none(mock_groq_cls, mock_openai_cls):
+    mock_groq_cls.return_value = _async_client_with_create(RuntimeError("provider failed"), side_effect=True)
+    settings = _settings("groq").model_copy(update={"openai_api_key": None})
+
+    with pytest.raises(GenerationError):
+        _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, settings))
+
+    mock_openai_cls.assert_not_called()
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_provider_exception_text_is_not_logged_or_returned(mock_groq_cls, mock_openai_cls, caplog):
+    sensitive_text = "request echoed confidential-question"
+    mock_groq_cls.return_value = _async_client_with_create(RuntimeError(sensitive_text), side_effect=True)
+    settings = _settings("groq").model_copy(update={"openai_api_key": None})
+
+    with caplog.at_level("ERROR"), pytest.raises(GenerationError) as exc_info:
+        _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, settings))
+
+    assert sensitive_text not in caplog.text
+    assert sensitive_text not in str(exc_info.value)

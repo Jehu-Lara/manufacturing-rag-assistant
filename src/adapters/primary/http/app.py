@@ -61,13 +61,26 @@ def create_app() -> FastAPI:
     # CORS middleware, which must be added before lifespan runs.
     settings = load_settings()
 
-    app = FastAPI(title="Manufacturing Knowledge RAG Assistant", lifespan=lifespan)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_allow_origins,
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
+    # Defensive HTTP response headers (X-Content-Type-Options, CSP
+    # frame-ancestors, Referrer-Policy, Permissions-Policy) are set once, at
+    # the public nginx edge (nginx.conf) — the single authority. FastAPI binds
+    # to loopback only and is never reached except through that proxy, so
+    # re-adding the headers here would only duplicate them on /health and
+    # /ready (some browsers reject a repeated X-Frame-Options / CSP).
+    app = FastAPI(
+        title="Manufacturing Knowledge RAG Assistant",
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
+    if settings.cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_allow_origins,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type", "X-API-Key"],
+        )
     app.add_exception_handler(Exception, unhandled_exception_handler)
     app.include_router(router)
     configure_tracing(app)

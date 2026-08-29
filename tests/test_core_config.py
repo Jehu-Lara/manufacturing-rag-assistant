@@ -55,3 +55,24 @@ def test_settings_is_frozen():
     )
     with pytest.raises(Exception):
         settings.log_level = "DEBUG"  # type: ignore[misc]
+
+
+def test_settings_repr_redacts_all_secret_values():
+    settings = Settings(
+        groq_api_key="groq-secret",
+        openai_api_key="openai-secret",
+        llm_provider="groq",
+        refusal_cosine_threshold=0.3,
+        log_level="INFO",
+        api_key="internal-secret",
+    )
+
+    rendered = repr(settings)
+    for secret in ("groq-secret", "openai-secret", "internal-secret"):
+        assert secret not in rendered
+    assert rendered.count("**********") == 3
+
+
+def test_default_cors_origins_are_empty(monkeypatch):
+    monkeypatch.delenv("CORS_ALLOW_ORIGINS", raising=False)
+    assert load_settings().cors_allow_origins == []

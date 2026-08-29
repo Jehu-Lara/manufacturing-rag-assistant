@@ -29,6 +29,10 @@ UI_LABELS: dict[str, dict[str, str]] = {
         "backend_unreachable_label": "Could not reach the backend",
         "request_id_label": "Request ID",
         "not_ready_label": "Backend index is still loading — try again shortly.",
+        "privacy_warning": (
+            "Do not enter confidential, personal, regulated, or proprietary information. "
+            "Your question and retrieved context are sent to the configured external LLM provider."
+        ),
     },
     "es": {
         "title": "Asistente de Conocimiento de Manufactura",
@@ -54,6 +58,10 @@ UI_LABELS: dict[str, dict[str, str]] = {
         "backend_unreachable_label": "No se pudo contactar al servidor",
         "request_id_label": "ID de solicitud",
         "not_ready_label": "El índice del servidor aún se está cargando — intente de nuevo en un momento.",
+        "privacy_warning": (
+            "No introduzca información confidencial, personal, regulada ni propietaria. "
+            "Su pregunta y el contexto recuperado se envían al proveedor LLM externo configurado."
+        ),
     },
 }
 

@@ -24,6 +24,7 @@ _REQUIRED_UI_LABEL_KEYS = (
     "backend_unreachable_label",
     "request_id_label",
     "not_ready_label",
+    "privacy_warning",
 )
 
 
