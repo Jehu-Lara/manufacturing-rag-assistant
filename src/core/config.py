@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 LlmProvider = Literal["groq", "openai"]
 
@@ -16,7 +16,7 @@ _DEFAULT_REFUSAL_COSINE_THRESHOLD = 0.5999
 _DEFAULT_LLM_PROVIDER: LlmProvider = "groq"
 _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_RATE_LIMIT_PER_MINUTE = 20
-_DEFAULT_CORS_ALLOW_ORIGINS = ("*",)
+_DEFAULT_CORS_ALLOW_ORIGINS: tuple[str, ...] = ()
 
 # Repo root, used only to compute default index paths below when CHROMA_PATH/
 # BM25_PATH aren't set — same physical retrieval/output/ location the old
@@ -41,13 +41,13 @@ class Settings(BaseModel):
 
     model_config = {"frozen": True}
 
-    groq_api_key: Optional[str]
-    openai_api_key: Optional[str]
+    groq_api_key: Optional[SecretStr]
+    openai_api_key: Optional[SecretStr]
     llm_provider: LlmProvider
     refusal_cosine_threshold: float
     log_level: str
     rate_limit_per_minute: int = _DEFAULT_RATE_LIMIT_PER_MINUTE
-    api_key: Optional[str] = None
+    api_key: Optional[SecretStr] = None
     cors_allow_origins: list[str] = list(_DEFAULT_CORS_ALLOW_ORIGINS)
     chroma_path: Path = _DEFAULT_CHROMA_PATH
     bm25_path: Path = _DEFAULT_BM25_PATH
@@ -58,8 +58,10 @@ def load_settings() -> Settings:
     if env_path.exists():
         load_dotenv(dotenv_path=env_path)
 
-    groq_api_key = os.environ.get("GROQ_API_KEY") or None
-    openai_api_key = os.environ.get("OPENAI_API_KEY") or None
+    groq_api_key_raw = os.environ.get("GROQ_API_KEY") or None
+    groq_api_key = SecretStr(groq_api_key_raw) if groq_api_key_raw is not None else None
+    openai_api_key_raw = os.environ.get("OPENAI_API_KEY") or None
+    openai_api_key = SecretStr(openai_api_key_raw) if openai_api_key_raw is not None else None
 
     llm_provider_raw = os.environ.get("LLM_PROVIDER", _DEFAULT_LLM_PROVIDER)
     if llm_provider_raw not in ("groq", "openai"):
@@ -86,7 +88,8 @@ def load_settings() -> Settings:
         except ValueError as exc:
             raise ValueError(f"RATE_LIMIT_PER_MINUTE must be an int, got {rate_limit_raw!r}") from exc
 
-    api_key = os.environ.get("API_KEY") or None
+    api_key_raw = os.environ.get("API_KEY") or None
+    api_key = SecretStr(api_key_raw) if api_key_raw is not None else None
 
     cors_raw = os.environ.get("CORS_ALLOW_ORIGINS")
     cors_allow_origins = (

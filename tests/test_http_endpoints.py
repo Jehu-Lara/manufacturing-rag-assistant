@@ -210,3 +210,27 @@ def test_auth_uses_constant_time_comparison_not_plain_inequality():
     source = inspect.getsource(router_module)
     assert "secrets.compare_digest" in source
     assert "x_api_key != settings.api_key" not in source
+
+
+def test_framework_documentation_routes_are_disabled(client):
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_chromadb_server_api_is_not_mounted(client):
+    response = client.post(
+        "/api/v2/tenants/default_tenant/databases/default_database/collections",
+        json={"name": "untrusted", "get_or_create": True},
+    )
+
+    assert response.status_code == 404
+
+
+def test_fastapi_does_not_duplicate_the_nginx_edge_security_headers(client):
+    """Defensive headers are the public nginx edge's job (single authority);
+    FastAPI must not re-add them, or /health and /ready would carry a
+    duplicated X-Frame-Options / CSP through the proxy."""
+    response = client.get("/health")
+    assert "X-Frame-Options" not in response.headers
+    assert "Content-Security-Policy" not in response.headers

@@ -1,5 +1,12 @@
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b
 
+# apt packages are deliberately not version-pinned. An exact Debian pin
+# (e.g. nginx=1.22.1-9+deb12u9) breaks every future rebuild the moment the
+# security pocket rotates and that version leaves the mirror, and it also
+# freezes known-old nginx/openssl. Reproducibility that matters is already
+# covered by the digest-pinned base image above and the hash-pinned pip set
+# below; `apt-get update` on that fixed base just pulls current security
+# patches for three low-risk packages (nginx, tini, ca-certificates).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         nginx \
@@ -24,7 +31,7 @@ COPY requirements-lock.txt .
 
 # Install the exact tested dependency set in one resolver transaction. The
 # additive PyTorch index supplies the pinned CPU-only wheel.
-RUN pip install --no-cache-dir -r requirements-lock.txt \
+RUN pip install --no-cache-dir --require-hashes -r requirements-lock.txt \
         --extra-index-url https://download.pytorch.org/whl/cpu \
     && pip check
 

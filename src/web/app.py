@@ -46,6 +46,7 @@ def main() -> None:
 
     st.title(labels["title"])
     st.caption(labels["subtitle"])
+    st.warning(labels["privacy_warning"])
 
     is_ready = client.ready()
 
