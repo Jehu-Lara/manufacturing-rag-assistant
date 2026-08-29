@@ -8,7 +8,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _read(path: str) -> str:
-    return (ROOT / path).read_text(encoding="utf-8")
+    # Normalize CRLF -> LF: on a Windows checkout with core.autocrlf=true the
+    # working-tree files carry CRLF, which would break multi-line substring
+    # assertions like "permissions:\n  contents: read". CI (Linux) checks out
+    # LF, so normalizing here makes the assertions checkout-independent.
+    return (ROOT / path).read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
 def test_embedder_pins_model_revision(monkeypatch):
@@ -32,10 +36,26 @@ def test_embedder_pins_model_revision(monkeypatch):
 
 def test_dockerfile_reproducibility_and_runtime_contract():
     dockerfile = _read("Dockerfile")
+    directives = "\n".join(
+        line for line in dockerfile.splitlines() if not line.lstrip().startswith("#")
+    )
 
     assert "python:3.11-slim-bookworm@sha256:" in dockerfile
     assert dockerfile.count("pip install --no-cache-dir") == 1
     assert "-r requirements-lock.txt" in dockerfile
+    assert "--require-hashes" in dockerfile
+    # apt packages are intentionally NOT version-pinned: exact Debian pins
+    # vanish from the mirror when the security pocket rotates (breaking every
+    # future rebuild) and freeze known-old nginx/openssl. The digest-pinned
+    # base image + hash-pinned pip set already cover meaningful reproducibility;
+    # `apt-get update` on that fixed base pulls current security patches for
+    # the three low-risk packages (nginx, tini, ca-certificates).
+    assert "apt-get install -y --no-install-recommends" in directives
+    for pkg in ("ca-certificates", "nginx", "tini"):
+        assert pkg in directives
+    assert "nginx=" not in directives
+    assert "ca-certificates=" not in directives
+    assert "tini=" not in directives
     assert "pip check" in dockerfile
     assert "tini" in dockerfile
     assert 'ENTRYPOINT ["/usr/bin/tini", "--"]' in dockerfile
@@ -63,6 +83,7 @@ def test_only_nginx_is_public_and_internal_api_routes_are_hidden():
     assert "server_tokens off;" in nginx
     assert "location = /query" in nginx and "return 404;" in nginx
     assert "location = /docs" in nginx
+    assert "location = /redoc" in nginx
     assert "location = /openapi.json" in nginx
     assert "--host 127.0.0.1 --port 8000" in start
     assert "--server.address 127.0.0.1" in start
@@ -82,9 +103,56 @@ def test_manual_oidc_deployment_is_sha_gated_and_allowlisted():
     assert "git merge-base --is-ancestor" in workflow
     assert '.conclusion == "success"' in workflow
     assert "HF_OIDC_RESOURCE: spaces/JehuLara/manufacturing-rag-assistant-live" in workflow
-    assert "huggingface_hub==1.29.0" in workflow
+    assert "--require-hashes -r requirements-hf-lock.txt" in workflow
+    assert "huggingface-hub==1.29.0" in _read("requirements-hf-lock.txt")
     assert "cp -R src corpus staging/" in workflow
+    assert "find staging -type l" in workflow
+    assert "gitleaks dir staging" in workflow
+    assert "--max-archive-depth 3" in workflow
+    assert "--max-decode-depth 3" in workflow
     assert "--delete '*'" in workflow
+
+
+def test_ci_supply_chain_is_read_only_sha_pinned_and_hash_enforced():
+    workflow = _read(".github/workflows/ci.yml")
+    lock = _read("requirements-lock.txt")
+    ci_lock = _read("requirements-ci-lock.txt")
+
+    assert "permissions:\n  contents: read" in workflow
+    assert "--require-hashes" in workflow
+    assert "requirements-ci-lock.txt" in workflow
+    assert "actions/checkout@v4" not in workflow
+    assert "actions/setup-python@v5" not in workflow
+    assert "actions/cache@v4" not in workflow
+    assert lock.count("--hash=sha256:") == 120
+    assert "ruff==0.16.5" in ci_lock
+    assert "mypy==2.3.1" in ci_lock
+
+
+def test_public_proxy_sets_defensive_headers_without_unsafe_streamlit_csp():
+    nginx = _read("nginx.conf")
+    web_app = _read("src/web/app.py")
+    web_render = _read("src/web/render.py")
+
+    nginx_directives = "\n".join(
+        line for line in nginx.splitlines() if not line.lstrip().startswith("#")
+    )
+
+    assert 'add_header X-Content-Type-Options "nosniff" always;' in nginx
+    assert 'add_header Referrer-Policy "no-referrer" always;' in nginx
+    # frame-ancestors CSP instead of X-Frame-Options: allows the Hugging Face
+    # cross-origin iframe embed while still constraining who may frame the app.
+    assert "add_header X-Frame-Options" not in nginx_directives
+    assert (
+        'add_header Content-Security-Policy '
+        '"frame-ancestors \'self\' https://huggingface.co https://*.hf.space" always;'
+    ) in nginx_directives
+    # Only frame-ancestors — no default-src/script-src that would break the
+    # Streamlit frontend's inline and eval'd JS.
+    assert "script-src" not in nginx_directives
+    assert "default-src" not in nginx_directives
+    assert "privacy_warning" in web_app
+    assert "unsafe_allow_html=True" not in web_render
 
 
 def test_space_card_declares_docker_cpu_basic_contract():

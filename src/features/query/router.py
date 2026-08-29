@@ -82,7 +82,8 @@ async def query(
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> QueryResponse:
-    if settings.api_key is not None and not secrets.compare_digest(x_api_key or "", settings.api_key):
+    expected_api_key = settings.api_key.get_secret_value() if settings.api_key is not None else None
+    if expected_api_key is not None and not secrets.compare_digest(x_api_key or "", expected_api_key):
         logger.warning("rejected request with missing or invalid API key", extra={"event": "invalid_api_key"})
         raise HTTPException(status_code=401, detail="Missing or invalid API key")
 

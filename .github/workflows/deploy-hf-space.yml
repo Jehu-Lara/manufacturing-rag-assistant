@@ -65,7 +65,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install pinned Hugging Face CLI
-        run: python -m pip install --disable-pip-version-check huggingface_hub==1.29.0
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-hf-lock.txt
 
       - name: Build allowlisted staging directory
         env:
@@ -90,6 +90,29 @@ jobs:
           test ! -e staging/docs
           test ! -e staging/eval
           test ! -e staging/.env
+          expected_top_level="$(printf '%s\n' DEPLOYED_AT DEPLOYED_SHA Dockerfile LICENSE README.md corpus nginx.conf requirements-lock.txt src start.sh)"
+          actual_top_level="$(find staging -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
+          test "$actual_top_level" = "$expected_top_level"
+          if find staging -type l -print -quit | grep -q .; then
+            echo "Symlinks are not allowed in the deployment staging directory" >&2
+            exit 1
+          fi
+          if find staging \( -type d -name .git -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' -o -name 'id_rsa*' \) \) -print -quit | grep -q .; then
+            echo "Forbidden secret-bearing path found in deployment staging" >&2
+            exit 1
+          fi
+
+      - name: Scan final staging for secrets
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            --output /tmp/gitleaks.tar.gz
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks dir staging --no-banner --redact --max-archive-depth 3 --max-decode-depth 3
 
       - name: Mirror selected commit to Hugging Face Space
         env:

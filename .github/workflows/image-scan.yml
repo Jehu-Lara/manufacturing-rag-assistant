@@ -1,0 +1,85 @@
+name: Image CVE scan
+
+# Trivy vulnerability scanning for the deploy artifact.
+#
+#   deps-scan  - fast, every push/PR: scans the checked-in dependency set
+#                (requirements-lock.txt et al.) and the Dockerfile for known
+#                CVEs and misconfigurations.
+#   image-scan - full `docker build` + image scan (Debian OS packages +
+#                installed Python libraries). Slow: the build downloads bge-m3
+#                and bakes the retrieval index. Runs weekly and on demand, not
+#                on every push.
+#
+# Neither job is wired into the deploy workflow's required-CI gate. Promoting
+# image-scan to a hard release gate is a deliberate branch-protection change
+# for the maintainer to make.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deps-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Trivy scan of dependency set and Dockerfile (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+          format: table
+
+      - name: Fail on a fixable CRITICAL
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+  image-scan:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build image
+        run: docker build -t rag4-scan:${{ github.sha }} .
+
+      - name: Trivy scan of built image (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: rag4-scan:${{ github.sha }}
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+          format: table
+
+      - name: Fail on a fixable CRITICAL in the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: rag4-scan:${{ github.sha }}
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table

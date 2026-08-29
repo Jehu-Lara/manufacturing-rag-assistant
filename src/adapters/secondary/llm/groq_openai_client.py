@@ -7,6 +7,7 @@ from typing import Any, Optional, cast
 
 import groq
 import openai
+from pydantic import SecretStr
 
 from src.core.config import Settings
 from src.core.errors import GenerationError
@@ -27,6 +28,17 @@ GROQ_MODEL = "openai/gpt-oss-120b"
 # this exact model per the task brief; no json_object fallback needed here.
 OPENAI_MODEL = "gpt-4o-mini"
 
+# Hard cap on generated tokens per call — bounds cost and runaway generation,
+# not a target length. Set to 1024, not a tighter value, because the primary
+# model (gpt-oss-120b) is a reasoning model: on Groq this budget also covers
+# the hidden reasoning trace, which at the default reasoning effort routinely
+# runs into the hundreds of tokens before any JSON is emitted. The eval-set
+# gold answers serialize to <=160 tokens of response JSON, so 1024 leaves
+# ample room for reasoning plus a thorough multi-citation answer while still
+# capping the worst case. Re-tune against `generation_eval` (real LLM calls)
+# if truncation (finish_reason "length") ever shows up in practice.
+MAX_COMPLETION_TOKENS = 1024
+
 # Fixed backoff schedule (seconds) used when a provider's rate-limit error
 # carries no Retry-After value. Index 0 is the wait before the 1st retry,
 # etc. len() also defines the max number of rate-limit retries per call.
@@ -41,7 +53,17 @@ def _other_provider(provider: str) -> str:
 
 
 def _api_key_for(provider: str, settings: Settings) -> Optional[str]:
-    return settings.groq_api_key if provider == "groq" else settings.openai_api_key
+    secret: Optional[SecretStr] = settings.groq_api_key if provider == "groq" else settings.openai_api_key
+    return secret.get_secret_value() if secret is not None else None
+
+
+def _provider_error_fields(provider: str, exc: Exception) -> dict[str, object]:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None) if response is not None else None
+    fields: dict[str, object] = {"provider": provider, "error_type": type(exc).__name__}
+    if isinstance(status_code, int):
+        fields["status_code"] = status_code
+    return fields
 
 
 def _extract_retry_after_seconds(exc: Exception) -> Optional[float]:
@@ -156,6 +178,13 @@ class GroqOpenAiLlmClient:
 
         for provider in (primary, fallback):
             api_key = _api_key_for(provider, settings)
+            if api_key is None:
+                logger.warning(
+                    "provider skipped because its API key is not configured",
+                    extra={"provider": provider, "role": "primary" if provider == primary else "fallback"},
+                )
+                attempts_summary.append(f"{provider}: not configured")
+                continue
             logger.info(
                 "attempting structured generation",
                 extra={"provider": provider, "role": "primary" if provider == primary else "fallback"},
@@ -166,9 +195,9 @@ class GroqOpenAiLlmClient:
             except Exception as exc:
                 logger.error(
                     "provider call failed, moving to next provider",
-                    extra={"provider": provider, "error": str(exc)},
+                    extra=_provider_error_fields(provider, exc),
                 )
-                attempts_summary.append(f"{provider}: call failed ({exc})")
+                attempts_summary.append(f"{provider}: call failed ({type(exc).__name__})")
                 continue
 
             parsed, error = _try_parse_and_validate(raw_text, schema)
@@ -190,9 +219,9 @@ class GroqOpenAiLlmClient:
             except Exception as exc:
                 logger.error(
                     "repair retry call failed, moving to next provider",
-                    extra={"provider": provider, "error": str(exc)},
+                    extra=_provider_error_fields(provider, exc),
                 )
-                attempts_summary.append(f"{provider}: repair call failed ({exc})")
+                attempts_summary.append(f"{provider}: repair call failed ({type(exc).__name__})")
                 continue
 
             parsed, repair_error = _try_parse_and_validate(repaired_raw, schema)
@@ -269,6 +298,7 @@ class GroqOpenAiLlmClient:
                     "type": "json_schema",
                     "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
                 },
+                max_completion_tokens=MAX_COMPLETION_TOKENS,
             )  # type: ignore[call-overload]
         except _JSON_SCHEMA_RETRY_ERROR_TYPES as exc:
             if not _is_unsupported_response_format_error(exc):
@@ -278,7 +308,10 @@ class GroqOpenAiLlmClient:
                 extra={"provider": "groq", "model": GROQ_MODEL},
             )
             response = await client.chat.completions.create(
-                model=GROQ_MODEL, messages=messages, response_format={"type": "json_object"}
+                model=GROQ_MODEL,
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_completion_tokens=MAX_COMPLETION_TOKENS,
             )  # type: ignore[call-overload]
         return cast(str, response.choices[0].message.content)
 
@@ -294,5 +327,6 @@ class GroqOpenAiLlmClient:
                 "type": "json_schema",
                 "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
             },
+            max_completion_tokens=MAX_COMPLETION_TOKENS,
         )  # type: ignore[call-overload]
         return cast(str, response.choices[0].message.content)
