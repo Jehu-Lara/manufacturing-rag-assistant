@@ -82,7 +82,7 @@ def run(expansion_modes: list[ExpansionMode] | None = None) -> Path:
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report = REPORT_DIR / f"regression_eval_v{version}.md"
-    report.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    report.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"Report written to: {report}")
     return report
 

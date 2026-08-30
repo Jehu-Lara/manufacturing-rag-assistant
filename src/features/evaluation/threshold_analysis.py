@@ -225,7 +225,14 @@ def build_report(
             ),
             f"- Chosen threshold = **{selection['threshold']:.4f}**.",
         ]
-    lines += ["", f"**Chosen REFUSAL_COSINE_THRESHOLD: {selection['threshold']:.4f}**", ""]
+    lines += [
+        "",
+        (
+            "**Analyzer-selected threshold on this eval set (diagnostic only — NOT applied; "
+            f"production REFUSAL_COSINE_THRESHOLD stays 0.5999): {selection['threshold']:.4f}**"
+        ),
+        "",
+    ]
 
     lines += _language_sections(
         unanswerable_scores, answerable_scores, unanswerable_languages, answerable_languages
@@ -261,9 +268,12 @@ def run() -> Path:
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"threshold_analysis_v{data['version']}.md"
-    report_path.write_text(report, encoding="utf-8")
+    report_path.write_text(report, encoding="utf-8", newline="\n")
 
-    print(f"Chosen REFUSAL_COSINE_THRESHOLD: {selection['threshold']:.4f}")
+    print(
+        "Analyzer-selected threshold (diagnostic only, NOT applied): "
+        f"{selection['threshold']:.4f}"
+    )
     print(f"Selection branch: {selection['branch']}")
     print(f"Report written to: {report_path}")
 

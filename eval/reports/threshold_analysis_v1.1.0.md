@@ -58,7 +58,7 @@ Refusal rule under test at each candidate threshold: refuse when top-1 semantic_
 - Rule applied: pick the sweep-table threshold that maximizes (unanswerable_correctly_refused - answerable_wrongly_refused); ties broken toward the lowest candidate threshold.
 - Chosen threshold = **0.5271**.
 
-**Chosen REFUSAL_COSINE_THRESHOLD: 0.5271**
+**Analyzer-selected threshold on this eval set (diagnostic only — NOT applied; production REFUSAL_COSINE_THRESHOLD stays 0.5999): 0.5271**
 
 ## Per-language diagnostics
 

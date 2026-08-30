@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+import src.features.evaluation.retrieval_eval as retrieval_eval
 from src.features.evaluation.retrieval_eval import build_report
 
 
@@ -98,3 +100,44 @@ def test_build_report_matched_pair_section_reports_none_when_no_pairs():
     report = build_report(questions, answerable_rows, unanswerable_rows, "9.9.9")
 
     assert "_No en/es answerable pairs share `expected_chunk_ids`._" in report
+
+
+def _patch_run(monkeypatch: Any, tmp_path: Path) -> None:
+    monkeypatch.setattr(retrieval_eval, "REPORT_DIR", tmp_path)
+    monkeypatch.setattr(retrieval_eval.eval_set_integrity, "verify", lambda: None)
+    monkeypatch.setattr(
+        retrieval_eval.eval_set_integrity,
+        "load_eval_set",
+        lambda: {
+            "version": "9.9.9",
+            "questions": [
+                {"id": "q1", "answerable": True},
+                {"id": "u1", "answerable": False},
+            ],
+        },
+    )
+    monkeypatch.setattr(retrieval_eval, "build_retriever", lambda mode: object())
+    monkeypatch.setattr(
+        retrieval_eval, "_score_answerable", lambda r, q: _answerable_row("q1", "en", 0.8)
+    )
+    monkeypatch.setattr(
+        retrieval_eval, "_score_unanswerable", lambda r, q: _unanswerable_row("u1", 0.1, 0.2)
+    )
+    monkeypatch.setattr(retrieval_eval, "build_report", lambda *a, **k: "# stub\n")
+
+
+def test_run_off_mode_writes_unsuffixed_report(monkeypatch: Any, tmp_path: Path) -> None:
+    _patch_run(monkeypatch, tmp_path)
+
+    path = retrieval_eval.run("off")
+
+    assert path == tmp_path / "retrieval_report_v9.9.9.md"
+    assert path.read_text(encoding="utf-8") == "# stub\n"
+
+
+def test_run_intervention_modes_write_mode_suffixed_reports(monkeypatch: Any, tmp_path: Path) -> None:
+    _patch_run(monkeypatch, tmp_path)
+
+    for mode in ("semantic", "lexical", "both"):
+        path = retrieval_eval.run(mode)  # type: ignore[arg-type]
+        assert path == tmp_path / f"retrieval_report_v9.9.9__{mode}.md"

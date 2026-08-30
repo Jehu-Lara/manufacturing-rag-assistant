@@ -79,7 +79,10 @@ def test_build_report_pooled_selection_is_unchanged_and_still_present():
     )
 
     assert "## Selection procedure and result" in report
-    assert f"**Chosen REFUSAL_COSINE_THRESHOLD: {selection['threshold']:.4f}**" in report
+    assert (
+        "**Analyzer-selected threshold on this eval set (diagnostic only — NOT applied; "
+        f"production REFUSAL_COSINE_THRESHOLD stays 0.5999): {selection['threshold']:.4f}**"
+    ) in report
 
 
 def test_build_report_includes_per_language_sweep_sections():

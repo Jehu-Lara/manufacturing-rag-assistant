@@ -143,6 +143,8 @@ Classes: `gate-over-refusal` (expected chunk in top-5, gate refuses), `retrieval
 document absent from top-5), `decoy-chunk` (a sibling/related chunk outranks the expected one, expected
 document still present in top-5).
 
+The decoy-chunk vs retrieval-miss split below rests on run-time top-5 chunk-id data not committed here; the Phase 2 plan's classification step will regenerate it from committed artifacts.
+
 ### 5a. eval_set v1.1.0 answerable misses (recall@5 == 0), `off` — n=11
 
 | id | language | retrieval OK? | gate decision | class |

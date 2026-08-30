@@ -234,8 +234,9 @@ def run(expansion_mode: ExpansionMode = "off") -> Path:
     report = build_report(questions, answerable_rows, unanswerable_rows, data["version"])
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = REPORT_DIR / f"retrieval_report_v{data['version']}.md"
-    report_path.write_text(report, encoding="utf-8")
+    suffix = "" if expansion_mode == "off" else f"__{expansion_mode}"
+    report_path = REPORT_DIR / f"retrieval_report_v{data['version']}{suffix}.md"
+    report_path.write_text(report, encoding="utf-8", newline="\n")
 
     recall_at_5 = sum(row["recall@5"] for row in answerable_rows) / len(answerable_rows)
     print(f"Recall@3: {sum(row['recall@3'] for row in answerable_rows) / len(answerable_rows):.3f}")
