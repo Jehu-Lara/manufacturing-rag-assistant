@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from src.core.telemetry import get_tracer
-from src.domain.models import RetrievalResult
-from src.domain.policies import fuse_rankings
+from src.domain.models import ExpansionMode, RetrievalResult
+from src.domain.policies import expand_query, fuse_rankings
 from src.domain.ports import LexicalIndexPort, VectorStorePort
 
 DEFAULT_TOP_N = 20
@@ -21,14 +21,23 @@ class HybridRetriever:
     imported by src.features.retrieval.cli (the index-build script); they
     share this feature-package directory but not a call graph."""
 
-    def __init__(self, vector_store: VectorStorePort, lexical_index: LexicalIndexPort) -> None:
+    def __init__(
+        self,
+        vector_store: VectorStorePort,
+        lexical_index: LexicalIndexPort,
+        expansion_mode: ExpansionMode = "off",
+    ) -> None:
         self._vector_store = vector_store
         self._lexical_index = lexical_index
+        self._expansion_mode = expansion_mode
 
     def retrieve(self, query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[RetrievalResult]:
         with get_tracer().start_as_current_span("retrieval.hybrid.query"):
-            semantic_hits = self._vector_store.query(query_text, top_n)
-            bm25_hits = self._lexical_index.query(query_text, top_n)
+            expanded = expand_query(query_text)
+            semantic_query = expanded if self._expansion_mode in ("semantic", "both") else query_text
+            lexical_query = expanded if self._expansion_mode in ("lexical", "both") else query_text
+            semantic_hits = self._vector_store.query(semantic_query, top_n)
+            bm25_hits = self._lexical_index.query(lexical_query, top_n)
 
             semantic_by_id = {
                 chunk_id: (rank, score, metadata)
