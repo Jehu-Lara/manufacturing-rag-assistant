@@ -54,6 +54,44 @@ def test_corpus_sha256_ignores_env_pdf_and_non_md_files(tmp_path: Path):
     assert index_manifest.corpus_sha256(tmp_path) == before
 
 
+def test_corpus_sha256_ignores_top_level_md_outside_embedded_subdirs(tmp_path: Path):
+    _write_mini_corpus(tmp_path)
+    (tmp_path / "SOURCES.md").write_text("| file | type |\n", encoding="utf-8")
+    (tmp_path / "notes.md").write_text("scratch notes\n", encoding="utf-8")
+    before = index_manifest.corpus_sha256(tmp_path)
+
+    (tmp_path / "SOURCES.md").write_text(
+        "| file | type |\n| public/alpha.md | public |\n", encoding="utf-8"
+    )
+    (tmp_path / "notes.md").write_text("edited scratch notes\n", encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text("v2\n", encoding="utf-8")
+
+    assert index_manifest.corpus_sha256(tmp_path) == before
+
+
+def test_corpus_sha256_changes_when_a_public_md_is_edited(tmp_path: Path):
+    _write_mini_corpus(tmp_path)
+    (tmp_path / "SOURCES.md").write_text("| file | type |\n", encoding="utf-8")
+    before = index_manifest.corpus_sha256(tmp_path)
+    (tmp_path / "public" / "alpha.md").write_text("# Alpha\n\nedited body\n", encoding="utf-8")
+    assert index_manifest.corpus_sha256(tmp_path) != before
+
+
+def test_corpus_sha256_ordering_matches_ingestion_discovery(tmp_path: Path):
+    _write_mini_corpus(tmp_path)
+    (tmp_path / "public" / "gamma.md").write_text("# Gamma\n\nbody g\n", encoding="utf-8")
+    (tmp_path / "synthetic" / "delta.md").write_text("# Delta\n\nbody d\n", encoding="utf-8")
+
+    ingestion_order = sorted((tmp_path / "public").glob("*.md")) + sorted(
+        (tmp_path / "synthetic").glob("*.md")
+    )
+    manifest_order = sorted(
+        [*(tmp_path / "public").glob("*.md"), *(tmp_path / "synthetic").glob("*.md")],
+        key=lambda p: p.relative_to(tmp_path).as_posix(),
+    )
+    assert manifest_order == ingestion_order
+
+
 def test_corpus_sha256_independent_of_mtime(tmp_path: Path):
     _write_mini_corpus(tmp_path)
     before = index_manifest.corpus_sha256(tmp_path)

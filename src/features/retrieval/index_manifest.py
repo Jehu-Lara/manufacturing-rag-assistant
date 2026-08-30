@@ -31,11 +31,16 @@ def chunks_sha256(path: Path = CHUNKS_FILE) -> str:
 
 
 def corpus_sha256(corpus_dir: Path = CORPUS_DIR) -> str:
-    """Hash over sorted relative POSIX paths of every ``*.md`` under corpus/,
-    each followed by its exact file bytes. Renaming a file changes the hash;
+    """Hash over the exact set of files ingestion embeds — ``public/*.md`` and
+    ``synthetic/*.md`` only (mirrors ``ingestion.use_cases.load_corpus``) — as
+    sorted relative POSIX paths each followed by its file bytes. Renaming an
+    embedded file changes the hash; ``corpus/SOURCES.md``, other stray ``.md``,
     ``.env``, PDFs, generated output, and mtimes never contribute."""
     digest = hashlib.sha256()
-    md_files = sorted(corpus_dir.rglob("*.md"), key=lambda p: p.relative_to(corpus_dir).as_posix())
+    md_files = sorted(
+        [*(corpus_dir / "public").glob("*.md"), *(corpus_dir / "synthetic").glob("*.md")],
+        key=lambda p: p.relative_to(corpus_dir).as_posix(),
+    )
     for md_file in md_files:
         rel_posix = md_file.relative_to(corpus_dir).as_posix()
         digest.update(rel_posix.encode("utf-8"))

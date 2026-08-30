@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, MODEL_REVISION
@@ -58,7 +60,7 @@ def test_provenance_header_is_frozen_dataclass_with_render():
     header = _header()
     rendered = header.render()
     assert isinstance(rendered, str)
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         header.index_profile = "contextual-v1"  # type: ignore[misc]
 
 
