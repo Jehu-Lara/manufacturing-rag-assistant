@@ -15,6 +15,13 @@ REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "re
 
 SWEEP_STEP = 0.02
 
+_LANGUAGES: list[tuple[str, str]] = [("en", "English"), ("es", "Spanish")]
+
+DIAGNOSTIC_NOTE = (
+    "Per-language tables are diagnostic; the shipped threshold remains the "
+    "pooled selection (0.5999 override, SPEC.md Phase 3)."
+)
+
 
 def _build_retriever() -> HybridRetriever:
     settings = load_settings()
@@ -106,8 +113,67 @@ def _stats_line(scores: list[float]) -> str:
     )
 
 
+def _filter_by_language(scores: list[float], languages: list[str], target: str) -> list[float]:
+    return [score for score, language in zip(scores, languages, strict=True) if language == target]
+
+
+def _language_sections(
+    unanswerable_scores: list[float],
+    answerable_scores: list[float],
+    unanswerable_languages: list[str],
+    answerable_languages: list[str],
+) -> list[str]:
+    lines: list[str] = [
+        "## Per-language diagnostics",
+        "",
+        DIAGNOSTIC_NOTE,
+        "",
+    ]
+    for code, label in _LANGUAGES:
+        lang_unanswerable = _filter_by_language(unanswerable_scores, unanswerable_languages, code)
+        lang_answerable = _filter_by_language(answerable_scores, answerable_languages, code)
+
+        lines += [
+            f"## {label} — answerable/unanswerable top-1 semantic_score",
+            "",
+            f"- Unanswerable (n={len(lang_unanswerable)}): sorted={sorted(lang_unanswerable)}",
+        ]
+        if lang_unanswerable:
+            lines.append(f"  - Stats: {_stats_line(lang_unanswerable)}")
+        lines.append(f"- Answerable (n={len(lang_answerable)}): sorted={sorted(lang_answerable)}")
+        if lang_answerable:
+            lines.append(f"  - Stats: {_stats_line(lang_answerable)}")
+
+        lines += ["", f"## {label} — cutoff sweep", ""]
+        if not lang_unanswerable or not lang_answerable:
+            lines += ["_Not enough per-language data to sweep._", ""]
+            continue
+
+        lines += [
+            "| threshold | answerable wrongly refused | unanswerable correctly refused | objective (correct - wrong) |",
+            "|---|---|---|---|",
+        ]
+        sweep_low = min(lang_unanswerable) - SWEEP_STEP
+        sweep_high = max(lang_answerable) + SWEEP_STEP
+        for candidate in sweep_thresholds(sweep_low, sweep_high):
+            wrongly_refused, correctly_refused = _refusal_counts(
+                candidate, lang_unanswerable, lang_answerable
+            )
+            lines.append(
+                f"| {candidate:.4f} | {wrongly_refused} | {correctly_refused} | "
+                f"{correctly_refused - wrongly_refused} |"
+            )
+        lines.append("")
+    return lines
+
+
 def build_report(
-    unanswerable_scores: list[float], answerable_scores: list[float], selection: dict[str, Any], version: str
+    unanswerable_scores: list[float],
+    answerable_scores: list[float],
+    unanswerable_languages: list[str],
+    answerable_languages: list[str],
+    selection: dict[str, Any],
+    version: str,
 ) -> str:
     lines = [
         f"# Refusal Threshold Analysis — eval_set v{version}",
@@ -172,6 +238,10 @@ def build_report(
         ]
     lines += ["", f"**Chosen REFUSAL_COSINE_THRESHOLD: {selection['threshold']:.4f}**", ""]
 
+    lines += _language_sections(
+        unanswerable_scores, answerable_scores, unanswerable_languages, answerable_languages
+    )
+
     return "\n".join(lines) + "\n"
 
 
@@ -186,10 +256,19 @@ def run() -> Path:
 
     answerable_scores = [_top1_semantic_score(retriever, q["question"]) for q in answerable]
     unanswerable_scores = [_top1_semantic_score(retriever, q["question"]) for q in unanswerable]
+    answerable_languages = [str(q["language"]) for q in answerable]
+    unanswerable_languages = [str(q["language"]) for q in unanswerable]
 
     selection = select_threshold(unanswerable_scores, answerable_scores)
 
-    report = build_report(unanswerable_scores, answerable_scores, selection, data["version"])
+    report = build_report(
+        unanswerable_scores,
+        answerable_scores,
+        unanswerable_languages,
+        answerable_languages,
+        selection,
+        data["version"],
+    )
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"threshold_analysis_v{data['version']}.md"
