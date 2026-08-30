@@ -13,6 +13,9 @@ LlmProvider = Literal["groq", "openai"]
 # Phase 3 status note for why (Step 2's tie-break objective and Step 6's
 # acceptance targets disagreed; 0.5999 is closer to both downstream targets).
 _DEFAULT_REFUSAL_COSINE_THRESHOLD = 0.5999
+# Public alias — importable by report/provenance tooling that must not reach
+# for a private name (see src/features/evaluation/artifacts.py).
+DEFAULT_REFUSAL_COSINE_THRESHOLD = _DEFAULT_REFUSAL_COSINE_THRESHOLD
 _DEFAULT_LLM_PROVIDER: LlmProvider = "groq"
 _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_RATE_LIMIT_PER_MINUTE = 20

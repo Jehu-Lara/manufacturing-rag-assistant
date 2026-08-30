@@ -3,12 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, MODEL_REVISION
-from src.core.config import _DEFAULT_REFUSAL_COSINE_THRESHOLD
+from src.core.config import DEFAULT_REFUSAL_COSINE_THRESHOLD
 from src.features.evaluation.eval_set_integrity import load_eval_set
 from src.features.evaluation.regression_set_integrity import load_regression_set
+from src.features.retrieval import index_manifest
 
 INDEX_PROFILES: tuple[str, ...] = ("raw-v1", "contextual-v1")
 EXPANSION_MODES: tuple[str, ...] = ("off", "semantic", "lexical", "both")
+
+CANONICAL_ALIAS_PROFILE = "raw-v1"
+CANONICAL_ALIAS_MODE = "off"
 
 
 def artifact_suffix(index_profile: str, expansion_mode: str) -> str:
@@ -17,6 +21,24 @@ def artifact_suffix(index_profile: str, expansion_mode: str) -> str:
     if expansion_mode not in EXPANSION_MODES:
         raise ValueError(f"expansion_mode must be one of {EXPANSION_MODES}, got {expansion_mode!r}")
     return f"__{index_profile}__{expansion_mode}"
+
+
+def artifact_filename(stem: str, version: str, index_profile: str, expansion_mode: str, ext: str) -> str:
+    """`<stem>_v<dataset-version><__profile__mode>.<ext>` — the dataset version
+    never moves; index_profile and expansion_mode are suffix axes, not version
+    bumps."""
+    return f"{stem}_v{version}{artifact_suffix(index_profile, expansion_mode)}.{ext}"
+
+
+def ensure_canonical_alias_allowed(index_profile: str, expansion_mode: str) -> None:
+    """The unsuffixed canonical name (`retrieval_report_v1.1.0.md` etc.) is the
+    frozen baseline; only a raw-v1/off run may write it."""
+    if (index_profile, expansion_mode) != (CANONICAL_ALIAS_PROFILE, CANONICAL_ALIAS_MODE):
+        raise ValueError(
+            "write_canonical_alias=True is only legal for the "
+            f"{CANONICAL_ALIAS_PROFILE}/{CANONICAL_ALIAS_MODE} baseline; got "
+            f"index_profile={index_profile!r}, expansion_mode={expansion_mode!r}"
+        )
 
 
 @dataclass(frozen=True)
@@ -76,11 +98,30 @@ def provenance_header(
         regression_set_sha256=str(regression_set["sha256"]),
         index_profile=index_profile,
         expansion_mode=expansion_mode,
-        refusal_cosine_threshold=_DEFAULT_REFUSAL_COSINE_THRESHOLD,
+        refusal_cosine_threshold=DEFAULT_REFUSAL_COSINE_THRESHOLD,
         chunks_sha256=chunks_sha256,
         corpus_sha256=corpus_sha256,
         embedding_model=MODEL_NAME,
         embedding_revision=MODEL_REVISION,
         index_build_commit=index_build_commit,
         evaluation_commit=evaluation_commit,
+    )
+
+
+def resolve_provenance(index_profile: str, expansion_mode: str) -> ProvenanceHeader:
+    """Build a provenance header for a runner about to write a report: hashes
+    from the on-disk chunk/corpus inputs, index-build commit from the manifest
+    when present (else the current checkout), evaluation commit from the
+    current checkout."""
+    try:
+        index_build_commit = index_manifest.read().build_commit
+    except (FileNotFoundError, ValueError):
+        index_build_commit = index_manifest.resolve_build_commit()
+    return provenance_header(
+        index_profile=index_profile,
+        expansion_mode=expansion_mode,
+        chunks_sha256=index_manifest.chunks_sha256(),
+        corpus_sha256=index_manifest.corpus_sha256(),
+        index_build_commit=index_build_commit,
+        evaluation_commit=index_manifest.resolve_build_commit(),
     )

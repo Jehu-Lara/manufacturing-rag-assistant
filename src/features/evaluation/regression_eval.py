@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.domain.models import ExpansionMode
+from src.domain.models import ExpansionMode, IndexProfile
 from src.domain.policies import RefusalPolicy, top1_semantic_score_from_results
 from src.domain.ports import RetrieverPort
-from src.features.evaluation import eval_set_integrity, regression_set_integrity
+from src.features.evaluation import artifacts, eval_set_integrity, regression_set_integrity
 from src.features.evaluation._eval_retriever import build_retriever
 from src.features.evaluation.metrics import recall_at_k
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K
@@ -41,51 +41,68 @@ def _fmt_score(score: float | None) -> str:
     return "n/a" if score is None else f"{score:.4f}"
 
 
-def run(expansion_modes: list[ExpansionMode] | None = None) -> Path:
-    modes = expansion_modes or ["off"]
+def run(
+    expansion_mode: ExpansionMode = "off",
+    *,
+    index_profile: IndexProfile = "raw-v1",
+    write_canonical_alias: bool = False,
+) -> Path:
+    if write_canonical_alias:
+        artifacts.ensure_canonical_alias_allowed(index_profile, expansion_mode)
+
     regression_set_integrity.verify()
     eval_set_integrity.verify()
     data = regression_set_integrity.load_regression_set()
     version = eval_set_integrity.load_eval_set()["version"]
     threshold = DIAGNOSTIC_THRESHOLD
 
+    header = artifacts.resolve_provenance(index_profile, expansion_mode)
     lines = [
+        header.render(),
+        "",
         f"# Regression Eval — eval_set v{version}",
         "",
         f"- threshold (diagnostic): {threshold}",
         "",
     ]
-    for mode in modes:
-        retriever = build_retriever(mode)
-        rows = [_row(retriever, q, threshold) for q in data["queries"]]
-        lines += [
-            f"## expansion_mode = {mode}",
-            "",
-            "| id | lang | should_answer | top1_semantic | gate | recall@5 |",
-            "|---|---|---|---|---|---|",
-        ]
-        for r in rows:
-            lines.append(
-                f"| {r['id']} | {r['language']} | {r['should_answer']} | "
-                f"{_fmt_score(r['top1_semantic'])} | {r['gate']} | {r['recall@5']} |"
-            )
-        answered_ok = sum(1 for r in rows if r["should_answer"] and r["gate"] == "answer")
-        refused_ok = sum(1 for r in rows if not r["should_answer"] and r["gate"] == "REFUSE")
-        n_ans = sum(1 for r in rows if r["should_answer"])
-        n_ref = sum(1 for r in rows if not r["should_answer"])
-        lines += [
-            "",
-            f"- answerable passing gate: {answered_ok}/{n_ans}",
-            f"- controls correctly refused: {refused_ok}/{n_ref}",
-            "",
-        ]
+    retriever = build_retriever(expansion_mode)
+    rows = [_row(retriever, q, threshold) for q in data["queries"]]
+    lines += [
+        f"## expansion_mode = {expansion_mode}",
+        "",
+        "| id | lang | should_answer | top1_semantic | gate | recall@5 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| {r['id']} | {r['language']} | {r['should_answer']} | "
+            f"{_fmt_score(r['top1_semantic'])} | {r['gate']} | {r['recall@5']} |"
+        )
+    answered_ok = sum(1 for r in rows if r["should_answer"] and r["gate"] == "answer")
+    refused_ok = sum(1 for r in rows if not r["should_answer"] and r["gate"] == "REFUSE")
+    n_ans = sum(1 for r in rows if r["should_answer"])
+    n_ref = sum(1 for r in rows if not r["should_answer"])
+    lines += [
+        "",
+        f"- answerable passing gate: {answered_ok}/{n_ans}",
+        f"- controls correctly refused: {refused_ok}/{n_ref}",
+        "",
+    ]
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report = REPORT_DIR / f"regression_eval_v{version}.md"
+    report = REPORT_DIR / artifacts.artifact_filename(
+        "regression_eval", version, index_profile, expansion_mode, "md"
+    )
     report.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    if write_canonical_alias:
+        (REPORT_DIR / f"regression_eval_v{version}.md").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8", newline="\n"
+        )
     print(f"Report written to: {report}")
     return report
 
 
 if __name__ == "__main__":
-    run(["off", "semantic", "lexical", "both"])
+    _modes: tuple[ExpansionMode, ...] = ("off", "semantic", "lexical", "both")
+    for _mode in _modes:
+        run(_mode, write_canonical_alias=(_mode == "off"))

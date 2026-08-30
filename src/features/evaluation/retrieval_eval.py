@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME
-from src.domain.models import ExpansionMode, RetrievalResult
-from src.features.evaluation import eval_set_integrity, metrics
+from src.domain.models import ExpansionMode, IndexProfile, RetrievalResult
+from src.features.evaluation import artifacts, eval_set_integrity, metrics
 from src.features.evaluation._eval_retriever import build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
@@ -219,9 +219,18 @@ def build_report(
     return "\n".join(lines) + "\n"
 
 
-def run(expansion_mode: ExpansionMode = "off") -> Path:
+def run(
+    expansion_mode: ExpansionMode = "off",
+    *,
+    index_profile: IndexProfile = "raw-v1",
+    write_canonical_alias: bool = False,
+) -> Path:
+    if write_canonical_alias:
+        artifacts.ensure_canonical_alias_allowed(index_profile, expansion_mode)
+
     eval_set_integrity.verify()
     data = eval_set_integrity.load_eval_set()
+    version = data["version"]
     questions = data["questions"]
 
     retriever = build_retriever(expansion_mode)
@@ -231,12 +240,20 @@ def run(expansion_mode: ExpansionMode = "off") -> Path:
     answerable_rows = [_score_answerable(retriever, q) for q in answerable]
     unanswerable_rows = [_score_unanswerable(retriever, q) for q in unanswerable]
 
-    report = build_report(questions, answerable_rows, unanswerable_rows, data["version"])
+    header = artifacts.resolve_provenance(index_profile, expansion_mode)
+    report = header.render() + "\n\n" + build_report(
+        questions, answerable_rows, unanswerable_rows, version
+    )
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    suffix = "" if expansion_mode == "off" else f"__{expansion_mode}"
-    report_path = REPORT_DIR / f"retrieval_report_v{data['version']}{suffix}.md"
+    report_path = REPORT_DIR / artifacts.artifact_filename(
+        "retrieval_report", version, index_profile, expansion_mode, "md"
+    )
     report_path.write_text(report, encoding="utf-8", newline="\n")
+    if write_canonical_alias:
+        (REPORT_DIR / f"retrieval_report_v{version}.md").write_text(
+            report, encoding="utf-8", newline="\n"
+        )
 
     recall_at_5 = sum(row["recall@5"] for row in answerable_rows) / len(answerable_rows)
     print(f"Recall@3: {sum(row['recall@3'] for row in answerable_rows) / len(answerable_rows):.3f}")

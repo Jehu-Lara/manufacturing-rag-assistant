@@ -5,6 +5,7 @@ from typing import Any, Literal, Optional
 
 Language = Literal["en", "es"]
 ExpansionMode = Literal["off", "semantic", "lexical", "both"]
+IndexProfile = Literal["raw-v1", "contextual-v1"]
 SourceType = Literal["public", "synthetic"]
 
 _REQUIRED_STRING_FIELDS = (

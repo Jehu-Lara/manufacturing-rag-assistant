@@ -1,12 +1,68 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
+from src.features.evaluation import threshold_analysis
 from src.features.evaluation.threshold_analysis import (
     build_report,
     select_threshold,
     sweep_thresholds,
 )
+
+
+class _FakeHeader:
+    def render(self) -> str:
+        return "## Provenance\n- index_profile: fake\n"
+
+
+def _patch_run(monkeypatch: Any, tmp_path: Path) -> None:
+    monkeypatch.setattr(threshold_analysis, "REPORT_DIR", tmp_path)
+    monkeypatch.setattr(threshold_analysis.eval_set_integrity, "verify", lambda: None)
+    monkeypatch.setattr(
+        threshold_analysis.eval_set_integrity,
+        "load_eval_set",
+        lambda: {
+            "version": "9.9.9",
+            "questions": [
+                {"id": "q1", "question": "q1?", "language": "en", "answerable": True},
+                {"id": "q2", "question": "q2?", "language": "es", "answerable": True},
+                {"id": "u1", "question": "u1?", "language": "en", "answerable": False},
+                {"id": "u2", "question": "u2?", "language": "es", "answerable": False},
+            ],
+        },
+    )
+    monkeypatch.setattr(threshold_analysis, "build_retriever", lambda mode="off": object())
+    scores = iter([0.80, 0.75, 0.20, 0.25])
+    monkeypatch.setattr(threshold_analysis, "_top1_semantic_score", lambda r, q: next(scores))
+    monkeypatch.setattr(
+        threshold_analysis.artifacts, "resolve_provenance", lambda ip, em: _FakeHeader()
+    )
+
+
+def test_run_off_and_semantic_produce_distinct_paths(monkeypatch: Any, tmp_path: Path) -> None:
+    _patch_run(monkeypatch, tmp_path)
+    off_path = threshold_analysis.run("off", index_profile="raw-v1")
+    _patch_run(monkeypatch, tmp_path)
+    semantic_path = threshold_analysis.run("semantic", index_profile="raw-v1")
+
+    assert off_path == tmp_path / "threshold_analysis_v9.9.9__raw-v1__off.md"
+    assert semantic_path == tmp_path / "threshold_analysis_v9.9.9__raw-v1__semantic.md"
+    assert off_path != semantic_path
+    assert "v9.9.9" in off_path.name and "v9.9.9" in semantic_path.name
+
+
+def test_run_canonical_alias_guarded(monkeypatch: Any, tmp_path: Path) -> None:
+    _patch_run(monkeypatch, tmp_path)
+    with pytest.raises(ValueError):
+        threshold_analysis.run("semantic", index_profile="raw-v1", write_canonical_alias=True)
+
+    _patch_run(monkeypatch, tmp_path)
+    path = threshold_analysis.run("off", index_profile="raw-v1", write_canonical_alias=True)
+    assert (tmp_path / "threshold_analysis_v9.9.9.md").exists()
+    assert path == tmp_path / "threshold_analysis_v9.9.9__raw-v1__off.md"
 
 
 def test_sweep_thresholds_covers_range_inclusive_of_endpoints():

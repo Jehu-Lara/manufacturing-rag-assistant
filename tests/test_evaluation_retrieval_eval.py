@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 import src.features.evaluation.retrieval_eval as retrieval_eval
 from src.features.evaluation.retrieval_eval import build_report
 
@@ -102,6 +104,11 @@ def test_build_report_matched_pair_section_reports_none_when_no_pairs():
     assert "_No en/es answerable pairs share `expected_chunk_ids`._" in report
 
 
+class _FakeHeader:
+    def render(self) -> str:
+        return "## Provenance\n- index_profile: fake\n"
+
+
 def _patch_run(monkeypatch: Any, tmp_path: Path) -> None:
     monkeypatch.setattr(retrieval_eval, "REPORT_DIR", tmp_path)
     monkeypatch.setattr(retrieval_eval.eval_set_integrity, "verify", lambda: None)
@@ -124,20 +131,46 @@ def _patch_run(monkeypatch: Any, tmp_path: Path) -> None:
         retrieval_eval, "_score_unanswerable", lambda r, q: _unanswerable_row("u1", 0.1, 0.2)
     )
     monkeypatch.setattr(retrieval_eval, "build_report", lambda *a, **k: "# stub\n")
+    monkeypatch.setattr(
+        retrieval_eval.artifacts, "resolve_provenance", lambda ip, em: _FakeHeader()
+    )
 
 
-def test_run_off_mode_writes_unsuffixed_report(monkeypatch: Any, tmp_path: Path) -> None:
+def test_run_raw_off_writes_profile_and_mode_suffixed_report(monkeypatch: Any, tmp_path: Path) -> None:
     _patch_run(monkeypatch, tmp_path)
 
     path = retrieval_eval.run("off")
 
-    assert path == tmp_path / "retrieval_report_v9.9.9.md"
-    assert path.read_text(encoding="utf-8") == "# stub\n"
+    assert path == tmp_path / "retrieval_report_v9.9.9__raw-v1__off.md"
+    assert "v9.9.9" in path.name
+    assert path.read_text(encoding="utf-8").endswith("# stub\n")
 
 
-def test_run_intervention_modes_write_mode_suffixed_reports(monkeypatch: Any, tmp_path: Path) -> None:
+def test_run_off_and_semantic_produce_distinct_paths(monkeypatch: Any, tmp_path: Path) -> None:
     _patch_run(monkeypatch, tmp_path)
 
-    for mode in ("semantic", "lexical", "both"):
-        path = retrieval_eval.run(mode)  # type: ignore[arg-type]
-        assert path == tmp_path / f"retrieval_report_v9.9.9__{mode}.md"
+    off_path = retrieval_eval.run("off", index_profile="raw-v1")
+    semantic_path = retrieval_eval.run("semantic", index_profile="raw-v1")
+
+    assert off_path != semantic_path
+    assert off_path == tmp_path / "retrieval_report_v9.9.9__raw-v1__off.md"
+    assert semantic_path == tmp_path / "retrieval_report_v9.9.9__raw-v1__semantic.md"
+    assert "v9.9.9" in off_path.name and "v9.9.9" in semantic_path.name
+
+
+def test_run_canonical_alias_rejected_for_non_baseline(monkeypatch: Any, tmp_path: Path) -> None:
+    _patch_run(monkeypatch, tmp_path)
+
+    with pytest.raises(ValueError):
+        retrieval_eval.run("semantic", index_profile="raw-v1", write_canonical_alias=True)
+    with pytest.raises(ValueError):
+        retrieval_eval.run("off", index_profile="contextual-v1", write_canonical_alias=True)
+
+
+def test_run_canonical_alias_written_only_for_raw_off(monkeypatch: Any, tmp_path: Path) -> None:
+    _patch_run(monkeypatch, tmp_path)
+
+    path = retrieval_eval.run("off", index_profile="raw-v1", write_canonical_alias=True)
+
+    assert path == tmp_path / "retrieval_report_v9.9.9__raw-v1__off.md"
+    assert (tmp_path / "retrieval_report_v9.9.9.md").exists()
