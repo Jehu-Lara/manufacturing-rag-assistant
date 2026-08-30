@@ -40,7 +40,7 @@ def verify(path: Path = EVAL_SET_FILE) -> None:
 def write(path: Path = EVAL_SET_FILE) -> None:
     data = load_eval_set(path)
     data["sha256"] = compute_hash(data["questions"])
-    with path.open("w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
 

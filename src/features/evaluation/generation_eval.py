@@ -9,12 +9,11 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
-from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
 from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient
-from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
 from src.core.config import load_settings
+from src.domain.models import ExpansionMode
 from src.features.evaluation import eval_set_integrity, metrics
+from src.features.evaluation._eval_retriever import build_retriever
 from src.features.query.use_cases import QueryUseCase
 from src.features.retrieval.use_cases import HybridRetriever
 
@@ -46,12 +45,11 @@ CSV_COLUMNS = [
 ]
 
 
-def _build_use_case_and_retriever() -> tuple[QueryUseCase, HybridRetriever]:
+def _build_use_case_and_retriever(
+    expansion_mode: ExpansionMode = "off",
+) -> tuple[QueryUseCase, HybridRetriever]:
     settings = load_settings()
-    embedder = SentenceTransformersEmbedder()
-    vector_store = ChromaVectorStore(persist_dir=settings.chroma_path, embedder=embedder)
-    lexical_index = Bm25LexicalIndex(persist_path=settings.bm25_path)
-    retriever = HybridRetriever(vector_store, lexical_index)
+    retriever = build_retriever(expansion_mode)
     llm_client = GroqOpenAiLlmClient()
     return QueryUseCase(retriever, llm_client, settings), retriever
 
@@ -236,6 +234,7 @@ def run(
     report_dir: Path = REPORT_DIR,
     use_case: Optional[QueryUseCase] = None,
     retriever: Optional[HybridRetriever] = None,
+    expansion_mode: ExpansionMode = "off",
 ) -> tuple[Path, Path]:
     """`use_case`/`retriever` are injectable (port fakes in tests) instead of
     always building real adapters — avoids needing to patch module internals
@@ -245,7 +244,7 @@ def run(
     questions = data["questions"]
 
     if use_case is None or retriever is None:
-        use_case, retriever = _build_use_case_and_retriever()
+        use_case, retriever = _build_use_case_and_retriever(expansion_mode)
     rows: list[dict[str, Any]] = []
     for question in questions:
         rows.append(_build_row(use_case, retriever, question))

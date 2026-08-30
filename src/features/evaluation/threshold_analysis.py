@@ -4,11 +4,8 @@ import statistics
 from pathlib import Path
 from typing import Any
 
-from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
-from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
-from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
-from src.core.config import load_settings
 from src.features.evaluation import eval_set_integrity, metrics
+from src.features.evaluation._eval_retriever import build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
 REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
@@ -21,14 +18,6 @@ DIAGNOSTIC_NOTE = (
     "Per-language tables are diagnostic; the shipped threshold remains the "
     "pooled selection (0.5999 override, SPEC.md Phase 3)."
 )
-
-
-def _build_retriever() -> HybridRetriever:
-    settings = load_settings()
-    embedder = SentenceTransformersEmbedder()
-    vector_store = ChromaVectorStore(persist_dir=settings.chroma_path, embedder=embedder)
-    lexical_index = Bm25LexicalIndex(persist_path=settings.bm25_path)
-    return HybridRetriever(vector_store, lexical_index)
 
 
 def _top1_semantic_score(retriever: HybridRetriever, question_text: str) -> float:
@@ -250,7 +239,7 @@ def run() -> Path:
     data = eval_set_integrity.load_eval_set()
     questions = data["questions"]
 
-    retriever = _build_retriever()
+    retriever = build_retriever()
     answerable = [q for q in questions if q["answerable"]]
     unanswerable = [q for q in questions if not q["answerable"]]
 
