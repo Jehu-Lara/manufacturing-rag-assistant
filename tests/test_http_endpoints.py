@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from src.adapters.primary.http.deps import get_query_use_case, get_rate_limiter, get_settings, get_vector_store
 from src.adapters.primary.http.rate_limit import RateLimiter
-from src.core.config import Settings
+from src.core.config import Settings, load_settings
 from src.domain.models import RetrievalResult
 from src.features.query.use_cases import QueryUseCase
 from src.main import app
@@ -185,6 +185,8 @@ def test_query_unhandled_exception_returns_500_with_generic_body():
         async def answer_question(self, question, language):
             raise RuntimeError("index not built")
 
+    no_key_settings = load_settings().model_copy(update={"api_key": None})
+    app.dependency_overrides[get_settings] = lambda: no_key_settings
     app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(max_requests=100)
     app.dependency_overrides[get_query_use_case] = lambda: _RaisingUseCase()
     try:

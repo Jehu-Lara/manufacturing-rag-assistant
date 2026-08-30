@@ -197,8 +197,9 @@ def _new_app_query_generation_error() -> dict:
 def _new_app_query_unhandled_exception_500() -> dict:
     from fastapi.testclient import TestClient
 
-    from src.adapters.primary.http.deps import get_query_use_case, get_rate_limiter
+    from src.adapters.primary.http.deps import get_query_use_case, get_rate_limiter, get_settings
     from src.adapters.primary.http.rate_limit import RateLimiter
+    from src.core.config import load_settings
     from src.main import app
 
     request_body = {"question": "What is the QC unit responsible for?", "language": "en"}
@@ -207,6 +208,8 @@ def _new_app_query_unhandled_exception_500() -> dict:
         async def answer_question(self, question: str, language: str):
             raise RuntimeError("index not built")
 
+    no_key_settings = load_settings().model_copy(update={"api_key": None})
+    app.dependency_overrides[get_settings] = lambda: no_key_settings
     app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(max_requests=1000)
     app.dependency_overrides[get_query_use_case] = lambda: _RaisingUseCase()
     try:
