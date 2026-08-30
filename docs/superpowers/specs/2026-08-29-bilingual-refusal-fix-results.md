@@ -33,16 +33,16 @@ the three interventions live in the `__<mode>` siblings so all four configs' num
 
 ## 2. `generation_eval` was NOT run — all refusal numbers below are gate-only
 
-There is no usable LLM credential in this environment:
+*Original Task 8 state:* `GROQ_API_KEY` was rejected with `401 … {"code": "invalid_api_key"}` and
+`OPENAI_API_KEY` was unset, so the baseline `generation_eval` aborted with every question returning
+*"structured generation failed on all providers"*.
 
-- `GROQ_API_KEY` is present but the provider rejects it — `401 Unauthorized … {"code": "invalid_api_key"}`
-  on a minimal `chat.completions.create` probe against `https://api.groq.com/openai/v1/chat/completions`.
-- `OPENAI_API_KEY` is not configured (the adapter logs *"provider skipped because its API key is not configured"*).
-
-A `generation_eval` baseline run was started and aborted after every question returned
-*"structured generation failed on all providers"*. No `generation_eval_v1.1.0.md` and no
-`manual_review_checklist_v1.1.0.csv` were produced. **The key was not rotated, edited, or printed** —
-that is the owner's action, not this task's.
+*Phase 1 closeout update:* the owner rotated the Groq key; it now authenticates. A fresh
+`generation_eval` run (`off` then `semantic`) was started and, after ~90 minutes of repeated
+**`429` rate-limiting** on the Groq free tier (`"rate limited, backing off before retrying same
+provider"` on loop), was aborted with no `generation_eval_v1.1.0.md` produced. `OPENAI_API_KEY` is
+still unset, so there is no fallback. Filling the four ⚠️ cells needs the Groq limits to reset, a paid
+tier, or the OpenAI fallback key — see §6 follow-up 1. **The key was never edited or printed by any task.**
 
 Consequently, every correct-refusal and false-refusal figure in this document is a
 **gate-only estimate**: the refusal decision predicted by applying `0.5999` to each question's
@@ -143,7 +143,12 @@ Classes: `gate-over-refusal` (expected chunk in top-5, gate refuses), `retrieval
 document absent from top-5), `decoy-chunk` (a sibling/related chunk outranks the expected one, expected
 document still present in top-5).
 
-The decoy-chunk vs retrieval-miss split below rests on run-time top-5 chunk-id data not committed here; the Phase 2 plan's classification step will regenerate it from committed artifacts.
+The decoy-chunk vs retrieval-miss split is reproduced in the committed artifact
+`eval/reports/classification_v1.1.0__raw-v1__off.md` (a re-run of retrieval over eval_set v1.1.0
+with a deterministic classifier). It confirms **11 non-gate failures = 9 same-document decoys +
+2 cross-document decoys, 0 true retrieval misses**, and separately **15 gate-over-refusals**
+(retrieval OK, gate refuses — a larger group than the decoys). Phase 2 Task 3 replaces that
+artifact with a per-question JSONL top-5 dump.
 
 ### 5a. eval_set v1.1.0 answerable misses (recall@5 == 0), `off` — n=11
 
@@ -249,13 +254,20 @@ But `semantic` still does not ship, for three independent reasons:
 
 ### Follow-ups (each its own reviewed increment — none performed here)
 
-1. **Restore an LLM credential and re-measure.** The Groq key at `a0c0a8c` is rejected with 401. Rotate it
-   (owner action) and re-run `generation_eval` at `off` and `semantic` to fill the four ⚠️ cells. Until
-   then no ship/no-ship call on the refusal cells is evidence-based.
-2. **Phase 2 (C2, contextual chunk embedding)** — design §6 steps 11–13, seeded by §5 above: 12 of the 12
-   non-gate failures are decoy chunks inside the correct document, which is the exact target of prefixing
-   `document_title > section_heading` onto the embedding input while leaving `documents=` as raw
-   `chunk_text`. Requires ADR-008 and a full `python -m src.features.retrieval.cli` reindex.
+1. **Re-measure `generation_eval` once the LLM provider is usable.** *Update (Phase 1 closeout):* the Groq
+   key was rotated by the owner and now authenticates, but `generation_eval` over 105 questions is
+   **429 rate-limited** on the Groq free tier — a run backed off repeatedly for ~90 min and was aborted
+   with no report produced. The four ⚠️ refusal cells stay gate-only until the limits reset, a paid tier is
+   configured, or the OpenAI fallback key is set. Phase 2 Task 8 retries `generation_eval` behind its own
+   owner gate; the Phase 1 no-C1-config-ships decision does not depend on it (it rests on ES Recall@5 = 0.781,
+   a retrieval number).
+2. **Phase 2 (C2, contextual chunk embedding)** — design §6 steps 11–13, seeded by §5 above: **11 non-gate
+   failures = 9 same-document decoys + 2 cross-document decoys, 0 true retrieval misses**
+   (`eval/reports/classification_v1.1.0__raw-v1__off.md`). The 9 same-document decoys are the exact target of
+   prefixing `document_title > section_heading` onto the embedding input while leaving `documents=` as raw
+   `chunk_text`; the 2 cross-document decoys are a weaker fit. Requires ADR-008 and a full
+   `python -m src.features.retrieval.cli` reindex. Separately, **15 gate-over-refusals** (retrieval OK, gate
+   refuses — larger than the decoy set) will need a gate follow-up (design §6 Phase 3), not C2.
 3. **Re-measure C1 on top of C2** once C2 lands — the two interventions attack different failure modes and
    the gate-over-refusal set may look different after reindexing.
 4. **Do not change `REFUSAL_COSINE_THRESHOLD`.** It stays `0.5999`. `threshold_analysis_v1.1.0.md` reports a
