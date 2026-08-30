@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal, Optional
 
 Language = Literal["en", "es"]
+ExpansionMode = Literal["off", "semantic", "lexical", "both"]
 SourceType = Literal["public", "synthetic"]
 
 _REQUIRED_STRING_FIELDS = (
