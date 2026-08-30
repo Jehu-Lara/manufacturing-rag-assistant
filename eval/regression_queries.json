@@ -1,0 +1,166 @@
+{
+  "version": "1.0.0",
+  "sha256": "51874427db66723820fe7164845cae8dd0e7f9e59babf5f357312671bf4234e5",
+  "queries": [
+    {
+      "id": "r001",
+      "query": "What is the difference between NPSHA and NPSHR?",
+      "language": "en",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "reported live failure (en)"
+    },
+    {
+      "id": "r002",
+      "query": "¿Cuál es la diferencia entre NPSHA y NPSHR?",
+      "language": "es",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "reported live failure (es)"
+    },
+    {
+      "id": "r003",
+      "query": "What is the difference between net positive suction head available (NPSHA) and net positive suction head required (NPSHR)?",
+      "language": "en",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "acronym + inline expansion (en)"
+    },
+    {
+      "id": "r004",
+      "query": "¿Cuál es la diferencia entre la altura neta de succión positiva disponible (NPSHA) y la requerida (NPSHR)?",
+      "language": "es",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "acronym + inline expansion (es)"
+    },
+    {
+      "id": "r005",
+      "query": "What is the difference between net positive suction head available and net positive suction head required?",
+      "language": "en",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "expansion only, no acronym (en)"
+    },
+    {
+      "id": "r006",
+      "query": "What is NPSHR?",
+      "language": "en",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "single acronym (en)"
+    },
+    {
+      "id": "r007",
+      "query": "¿Qué es NPSHR?",
+      "language": "es",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "single acronym (es)"
+    },
+    {
+      "id": "r008",
+      "query": "How is cavitation avoided in a centrifugal pump?",
+      "language": "en",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "terse, no acronym (en)"
+    },
+    {
+      "id": "r009",
+      "query": "¿Qué es la cavitación en una bomba centrífuga y qué la causa?",
+      "language": "es",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0006",
+      "should_answer": true,
+      "note": "eval q009, gate-refused (es)"
+    },
+    {
+      "id": "r010",
+      "query": "What is the OSHA PEL for acetone?",
+      "language": "en",
+      "expected_chunk_id": "niosh-pocket-guide-excerpt::chunk-0010",
+      "should_answer": true,
+      "note": "acronym + decoy front-matter (en)"
+    },
+    {
+      "id": "r011",
+      "query": "¿Cuál es el PEL de la acetona?",
+      "language": "es",
+      "expected_chunk_id": "niosh-pocket-guide-excerpt::chunk-0010",
+      "should_answer": true,
+      "note": "acronym + decoy front-matter (es)"
+    },
+    {
+      "id": "r012",
+      "query": "What is the IDLH for carbon monoxide?",
+      "language": "en",
+      "expected_chunk_id": "niosh-pocket-guide-excerpt::chunk-0018",
+      "should_answer": true,
+      "note": "acronym + decoy front-matter (en)"
+    },
+    {
+      "id": "r013",
+      "query": "¿Cuál es el IDLH del monóxido de carbono?",
+      "language": "es",
+      "expected_chunk_id": "niosh-pocket-guide-excerpt::chunk-0018",
+      "should_answer": true,
+      "note": "acronym + decoy front-matter (es)"
+    },
+    {
+      "id": "r014",
+      "query": "What are the six pieces of information on a hazardous chemical label under HazCom?",
+      "language": "en",
+      "expected_chunk_id": "cfr-29-1910-1200-hazcom::chunk-0008",
+      "should_answer": true,
+      "note": "abbreviation 'HazCom' (en)"
+    },
+    {
+      "id": "r015",
+      "query": "Can an employer be exempt from LOTO if machine guarding removes exposure?",
+      "language": "en",
+      "expected_chunk_id": "osha-3170-machine-guarding::chunk-0021",
+      "should_answer": true,
+      "note": "acronym LOTO, cross-doc (en)"
+    },
+    {
+      "id": "r016",
+      "query": "¿Un empleador puede quedar exento de LOTO si el resguardo elimina la exposición?",
+      "language": "es",
+      "expected_chunk_id": "osha-3170-machine-guarding::chunk-0021",
+      "should_answer": true,
+      "note": "acronym LOTO, cross-doc (es)"
+    },
+    {
+      "id": "r017",
+      "query": "NPSH-A vs NPSHa",
+      "language": "en",
+      "expected_chunk_id": "doe-hdbk-1018-1-pumps::chunk-0007",
+      "should_answer": true,
+      "note": "surface variants / hyphenation (en)"
+    },
+    {
+      "id": "r018",
+      "query": "What NPSH margin does API 610 recommend for this pump?",
+      "language": "en",
+      "expected_chunk_id": null,
+      "should_answer": false,
+      "note": "control: API 610 not in corpus (en)"
+    },
+    {
+      "id": "r019",
+      "query": "¿Qué margen de NPSH recomienda la norma API 610 para esta bomba?",
+      "language": "es",
+      "expected_chunk_id": null,
+      "should_answer": false,
+      "note": "control: API 610 not in corpus (es)"
+    },
+    {
+      "id": "r020",
+      "query": "What is the PEL for toluene diisocyanate?",
+      "language": "en",
+      "expected_chunk_id": null,
+      "should_answer": false,
+      "note": "control: TDI not among the 12 NIOSH excerpt chemicals (en)"
+    }
+  ]
+}
