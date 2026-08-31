@@ -60,14 +60,15 @@ otherwise.
 The vector input for each chunk becomes:
 
 ```
-{document_title} › {section_heading}
+{document_title} > {section_heading}
 
 {chunk_text}
 ```
 
-Exact delimiter: a space, `›` (U+203A, single right-pointing angle quotation
-mark), a space between title and heading; then a blank line (`\n\n`) before the
-raw body. This prefix is under 30 tokens; `assert_fits_max_seq_length()` runs on
+Exact delimiter: `f"{document_title} > {section_heading}\n\n{chunk_text}"` — a
+space, an ASCII `>`, a space between title and heading; then a blank line
+(`\n\n`) before the raw body. This matches the concrete formatter in the design
+spec (§6). This prefix is under 30 tokens; `assert_fits_max_seq_length()` runs on
 the contextual inputs (not the raw bodies) for `contextual-v1`, against the
 bge-m3 `max_seq_length` of 8192.
 
