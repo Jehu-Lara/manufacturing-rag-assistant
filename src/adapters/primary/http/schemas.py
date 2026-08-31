@@ -27,6 +27,8 @@ class QueryResponse(BaseModel):
     status: Literal["ok", "error"]
     confidence: Optional[float]
     threshold: float
+    review_floor: Optional[float]
+    gate_band: Literal["hard_refuse", "grounded_review", "confident"]
     language: Literal["en", "es"]
     request_id: str
 

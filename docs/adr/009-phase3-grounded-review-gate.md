@@ -12,7 +12,10 @@ plan of record, not a decision in force.
 
 Phase 3A (startup integrity guards, this ADR's §"Startup fail-fast") is
 implemented and in force as of commit `273cf1e`; Phase 3A.1 hardens the holdout
-guard and adds this ADR. Phase 3B (the policy itself) is not started.
+guard and adds this ADR; Phase 3A.2 makes the holdout guard pair-aware. Phase 3B
+(the policy code, prompts, HTTP fields and UI) is implemented behind the
+`binary` default — it changes no behaviour until `REFUSAL_POLICY=grounded_review`
+is set, and the default flip stays gated on the Phase 3C holdout run.
 
 ## Context
 
@@ -66,11 +69,27 @@ A three-band gate replaces the binary one when `REFUSAL_POLICY=grounded_review`:
 
 - `score < 0.5500` (or missing) → `hard_refuse`, exactly today's behaviour, zero
   LLM calls.
-- `0.5500 <= score < 0.5999` → `grounded_review`: one structured LLM call whose
-  answer is accepted only if every cited chunk is in the top-5 and carries an
-  exact verbatim quote from the raw `chunk_text`; otherwise it degrades to a
-  refusal.
-- `score >= 0.5999` → `confident`, today's prompt and path unchanged.
+- `0.5500 <= score < 0.5999` → `grounded_review`: one *logical* structured LLM
+  call whose answer is accepted only if every cited chunk is in the top-5 and
+  carries an exact verbatim quote from the raw `chunk_text`; otherwise it
+  degrades to the canonical refusal. "One logical call" is the gate's contract,
+  not a network guarantee — the LLM adapter may still perform physical provider
+  retries, JSON repair, or a primary→fallback provider switch underneath. In this
+  band a self-refusal (`refused: true`) always yields the canonical refusal
+  string, never the model's own text (`decision_reason` `llm_self_refusal`);
+  `binary` / `confident` keep the legacy behaviour of passing the model's
+  refusal text through.
+- `score >= 0.5999` → `confident`, today's prompt and path unchanged **except**
+  for the empty-answer guard below.
+
+**One small deviation from "`binary`/`confident` unchanged":** in every band, a
+non-refused answer whose body is empty or whitespace-only is now degraded to the
+canonical refusal (`decision_reason` `empty_answer`) instead of being returned as
+a blank `refused: false` answer. This is a strict safety improvement — a blank
+answer was never useful — and it is the only behavioural change `binary` and the
+`confident` band see under Phase 3B. It is covered by `test_query_use_case.py`
+(`test_confident_empty_answer_with_valid_citations_downgrades` and the grey-band
+equivalent).
 
 `0.5999` keeps its exact current meaning (high-confidence boundary) and is not
 touched. The floor `0.5500` is fixed **now, before the holdout is authored**, by

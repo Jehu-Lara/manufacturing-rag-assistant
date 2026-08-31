@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 from typing import Literal, Optional
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, SecretStr
 
 LlmProvider = Literal["groq", "openai"]
+RefusalPolicyName = Literal["binary", "grounded_review"]
 
 # Overridden from the threshold_analysis.py-selected 0.5599 — see SPEC.md's
 # Phase 3 status note for why (Step 2's tie-break objective and Step 6's
@@ -16,6 +18,15 @@ _DEFAULT_REFUSAL_COSINE_THRESHOLD = 0.5999
 # Public alias — importable by report/provenance tooling that must not reach
 # for a private name (see src/features/evaluation/artifacts.py).
 DEFAULT_REFUSAL_COSINE_THRESHOLD = _DEFAULT_REFUSAL_COSINE_THRESHOLD
+
+# Phase 3 (ADR-009). binary = today's single-cutoff gate. grounded_review adds
+# a middle band [review_floor, cosine_threshold) that makes one verified LLM
+# call instead of refusing outright. 0.5500 is pre-registered — see ADR-009 for
+# the derivation from min(r001, r002) top1_semantic. Default stays binary.
+_DEFAULT_REFUSAL_POLICY: RefusalPolicyName = "binary"
+_DEFAULT_REFUSAL_REVIEW_FLOOR = 0.5500
+DEFAULT_REFUSAL_REVIEW_FLOOR = _DEFAULT_REFUSAL_REVIEW_FLOOR
+
 _DEFAULT_LLM_PROVIDER: LlmProvider = "groq"
 _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_RATE_LIMIT_PER_MINUTE = 20
@@ -48,6 +59,8 @@ class Settings(BaseModel):
     openai_api_key: Optional[SecretStr]
     llm_provider: LlmProvider
     refusal_cosine_threshold: float
+    refusal_policy: RefusalPolicyName = _DEFAULT_REFUSAL_POLICY
+    refusal_review_floor: float = _DEFAULT_REFUSAL_REVIEW_FLOOR
     log_level: str
     rate_limit_per_minute: int = _DEFAULT_RATE_LIMIT_PER_MINUTE
     api_key: Optional[SecretStr] = None
@@ -79,6 +92,37 @@ def load_settings() -> Settings:
             refusal_cosine_threshold = float(threshold_raw)
         except ValueError as exc:
             raise ValueError(f"REFUSAL_COSINE_THRESHOLD must be a float, got {threshold_raw!r}") from exc
+
+    refusal_policy_raw = os.environ.get("REFUSAL_POLICY", _DEFAULT_REFUSAL_POLICY)
+    if refusal_policy_raw not in ("binary", "grounded_review"):
+        raise ValueError(
+            f"REFUSAL_POLICY must be 'binary' or 'grounded_review', got {refusal_policy_raw!r}"
+        )
+    refusal_policy: RefusalPolicyName = refusal_policy_raw  # type: ignore[assignment]
+
+    review_floor_raw = os.environ.get("REFUSAL_REVIEW_FLOOR")
+    if review_floor_raw is None:
+        refusal_review_floor = _DEFAULT_REFUSAL_REVIEW_FLOOR
+    else:
+        try:
+            refusal_review_floor = float(review_floor_raw)
+        except ValueError as exc:
+            raise ValueError(
+                f"REFUSAL_REVIEW_FLOOR must be a float, got {review_floor_raw!r}"
+            ) from exc
+
+    for name, value in (
+        ("REFUSAL_COSINE_THRESHOLD", refusal_cosine_threshold),
+        ("REFUSAL_REVIEW_FLOOR", refusal_review_floor),
+    ):
+        if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} must be a finite value in [0, 1], got {value!r}")
+    if refusal_policy == "grounded_review" and not refusal_review_floor < refusal_cosine_threshold:
+        raise ValueError(
+            "REFUSAL_REVIEW_FLOOR must be strictly below REFUSAL_COSINE_THRESHOLD when "
+            f"REFUSAL_POLICY='grounded_review' (floor={refusal_review_floor}, "
+            f"threshold={refusal_cosine_threshold})"
+        )
 
     log_level = os.environ.get("LOG_LEVEL", _DEFAULT_LOG_LEVEL)
 
@@ -112,6 +156,8 @@ def load_settings() -> Settings:
         openai_api_key=openai_api_key,
         llm_provider=llm_provider,
         refusal_cosine_threshold=refusal_cosine_threshold,
+        refusal_policy=refusal_policy,
+        refusal_review_floor=refusal_review_floor,
         log_level=log_level,
         rate_limit_per_minute=rate_limit_per_minute,
         api_key=api_key,

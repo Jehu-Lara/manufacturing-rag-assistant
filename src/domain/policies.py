@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
+import unicodedata
+from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
-from src.domain.models import Citation, RetrievalResult
+from src.core.config import RefusalPolicyName
+from src.domain.models import Citation, DecisionReason, GateBand, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
 RRF_K = 60
+
+# Phase 3 grounded-review evidence bounds (ADR-009). A supporting quote must be
+# a substantial, contiguous verbatim span — long enough to be real evidence,
+# short enough that it can't be the whole chunk pasted back.
+MIN_SUPPORTING_QUOTE_CHARS = 40
+MAX_SUPPORTING_QUOTE_CHARS = 600
+
+_WHITESPACE_RE = re.compile(r"\s+")
 
 # Domain acronym glossary. Curated 2026-08-30 by scanning corpus/ for all-caps
 # tokens by frequency, then looking up each term's expansion.
@@ -103,14 +115,114 @@ def top1_semantic_score_from_results(results: Sequence[RetrievalResult]) -> Opti
 
 
 class RefusalPolicy:
-    def __init__(self, threshold: float) -> None:
+    def __init__(
+        self,
+        threshold: float,
+        *,
+        mode: RefusalPolicyName = "binary",
+        review_floor: float = 0.5500,
+    ) -> None:
+        for name, value in (("threshold", threshold), ("review_floor", review_floor)):
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError(f"RefusalPolicy {name} must be a finite value in [0, 1], got {value!r}")
+        if mode not in ("binary", "grounded_review"):
+            raise ValueError(f"RefusalPolicy mode must be 'binary' or 'grounded_review', got {mode!r}")
+        if mode == "grounded_review" and not review_floor < threshold:
+            raise ValueError(
+                f"RefusalPolicy review_floor must be strictly below threshold for grounded_review "
+                f"(floor={review_floor}, threshold={threshold})"
+            )
         self._threshold = threshold
+        self._mode: RefusalPolicyName = mode
+        self._review_floor = review_floor
 
     def top1_semantic_score(self, results: Sequence[RetrievalResult]) -> Optional[float]:
         return top1_semantic_score_from_results(results)
 
+    def classify_score(self, score: Optional[float]) -> GateBand:
+        if score is None:
+            return "hard_refuse"
+        if self._mode == "binary":
+            return "confident" if score >= self._threshold else "hard_refuse"
+        if score < self._review_floor:
+            return "hard_refuse"
+        if score < self._threshold:
+            return "grounded_review"
+        return "confident"
+
+    def classify(self, results: Sequence[RetrievalResult]) -> GateBand:
+        return self.classify_score(self.top1_semantic_score(results))
+
+    def hard_refuse_reason(self) -> DecisionReason:
+        return "below_review_floor" if self._mode == "grounded_review" else "below_binary_threshold"
+
     def is_confident(self, results: Sequence[RetrievalResult]) -> bool:
-        return is_confident(self.top1_semantic_score(results), self._threshold)
+        return self.classify(results) == "confident"
+
+
+def normalize_evidence_text(value: str) -> str:
+    """NFKC + whitespace-collapse. The only tolerance allowed on a verbatim
+    quote (ADR-009): line breaks and repeated spaces in the source markdown
+    must not defeat an otherwise-exact match. No case folding, no punctuation
+    changes, no elision."""
+    return _WHITESPACE_RE.sub(" ", unicodedata.normalize("NFKC", value)).strip()
+
+
+@dataclass(frozen=True)
+class GroundingValidation:
+    citations: list[Citation]
+    failure_reason: Optional[DecisionReason]
+
+
+class GroundedEvidenceResolver:
+    """Fail-closed: any invalid evidence item invalidates the whole response
+    (no partial acceptance). Returns resolved citations only when every item
+    names a retrieved chunk and carries a normalized 40-600 char verbatim
+    substring of that chunk's raw text."""
+
+    @staticmethod
+    def resolve(
+        evidence_items: Sequence[Any], results: Sequence[RetrievalResult]
+    ) -> GroundingValidation:
+        if not evidence_items:
+            return GroundingValidation([], "missing_evidence")
+
+        results_by_id = {result.chunk_id: result for result in results}
+        cited_ids: list[str] = []
+        seen: set[str] = set()
+
+        for item in evidence_items:
+            if not isinstance(item, dict):
+                return GroundingValidation([], "invalid_evidence_shape")
+            chunk_id = item.get("chunk_id")
+            quote = item.get("supporting_quote")
+            if not isinstance(chunk_id, str) or not isinstance(quote, str):
+                return GroundingValidation([], "invalid_evidence_shape")
+
+            result = results_by_id.get(chunk_id)
+            if result is None:
+                return GroundingValidation([], "chunk_not_retrieved")
+
+            normalized_quote = normalize_evidence_text(quote)
+            if len(normalized_quote) < MIN_SUPPORTING_QUOTE_CHARS:
+                return GroundingValidation([], "quote_too_short")
+            if len(normalized_quote) > MAX_SUPPORTING_QUOTE_CHARS:
+                return GroundingValidation([], "quote_too_long")
+
+            chunk_text = result.metadata.get("chunk_text")
+            if not isinstance(chunk_text, str):
+                return GroundingValidation([], "quote_not_found")
+            if normalized_quote not in normalize_evidence_text(chunk_text):
+                return GroundingValidation([], "quote_not_found")
+
+            if chunk_id not in seen:
+                seen.add(chunk_id)
+                cited_ids.append(chunk_id)
+
+        citations = CitationResolver.resolve([{"chunk_id": cid} for cid in cited_ids], results)
+        if not citations:
+            return GroundingValidation([], "unresolved_citation")
+        return GroundingValidation(citations, None)
 
 
 class CitationResolver:

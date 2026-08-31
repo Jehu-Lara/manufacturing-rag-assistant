@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from src.domain.models import Citation, RetrievalResult
 from src.domain.policies import (
     GLOSSARY,
     RRF_K,
     CitationResolver,
+    GroundedEvidenceResolver,
     RefusalPolicy,
     expand_query,
     fuse_rankings,
     is_confident,
+    normalize_evidence_text,
     rrf_scores,
     top1_semantic_score_from_results,
 )
@@ -152,6 +156,140 @@ def test_citation_resolver_empty_llm_citations_returns_empty_list_no_error():
     resolved = CitationResolver.resolve([], results)
 
     assert resolved == []
+
+
+def _grounding_result(chunk_id: str, chunk_text: str, semantic_rank: int = 1) -> RetrievalResult:
+    return _result(chunk_id, semantic_rank, 0.57, chunk_text=chunk_text)
+
+
+_CHUNK_BODY = (
+    "The quality control unit shall have the responsibility for approving or rejecting all "
+    "components, drug product containers, closures, in-process materials, packaging material, "
+    "labeling, and drug products."
+)
+
+
+def test_refusal_policy_binary_matches_legacy_is_confident():
+    below = [_result("c", 1, 0.4)]
+    at = [_result("c", 1, 0.5999)]
+    assert RefusalPolicy(0.5999).classify_score(0.4) == "hard_refuse"
+    assert RefusalPolicy(0.5999).classify(below) == "hard_refuse"
+    assert RefusalPolicy(0.5999).classify(at) == "confident"
+    assert RefusalPolicy(0.5999).classify_score(None) == "hard_refuse"
+
+
+@pytest.mark.parametrize(
+    "score, expected",
+    [
+        (None, "hard_refuse"),
+        (0.4999, "hard_refuse"),
+        (0.5499, "hard_refuse"),
+        (0.5500, "grounded_review"),
+        (0.5642, "grounded_review"),
+        (0.5998, "grounded_review"),
+        (0.5999, "confident"),
+        (0.7, "confident"),
+    ],
+)
+def test_refusal_policy_grounded_review_bands(score, expected):
+    policy = RefusalPolicy(0.5999, mode="grounded_review", review_floor=0.5500)
+    assert policy.classify_score(score) == expected
+
+
+def test_refusal_policy_rejects_non_finite_values():
+    with pytest.raises(ValueError, match="finite"):
+        RefusalPolicy(float("nan"))
+    with pytest.raises(ValueError, match="finite"):
+        RefusalPolicy(0.6, review_floor=float("inf"))
+
+
+def test_refusal_policy_grounded_review_requires_floor_below_threshold():
+    with pytest.raises(ValueError, match="strictly below"):
+        RefusalPolicy(0.55, mode="grounded_review", review_floor=0.55)
+    with pytest.raises(ValueError, match="strictly below"):
+        RefusalPolicy(0.55, mode="grounded_review", review_floor=0.60)
+
+
+def test_refusal_policy_hard_refuse_reason_depends_on_mode():
+    assert RefusalPolicy(0.5999).hard_refuse_reason() == "below_binary_threshold"
+    assert (
+        RefusalPolicy(0.5999, mode="grounded_review").hard_refuse_reason() == "below_review_floor"
+    )
+
+
+def test_normalize_evidence_text_collapses_whitespace_only():
+    assert normalize_evidence_text("a  b\n\tc ") == "a b c"
+
+
+def test_grounded_evidence_accepts_exact_quote_with_collapsed_whitespace():
+    results = [_grounding_result("c1", _CHUNK_BODY)]
+    quote = "quality control unit shall\n  have the responsibility for approving or rejecting all components"
+    out = GroundedEvidenceResolver.resolve(
+        [{"chunk_id": "c1", "supporting_quote": quote}], results
+    )
+    assert out.failure_reason is None
+    assert [c.chunk_id for c in out.citations] == ["c1"]
+
+
+def test_grounded_evidence_empty_is_missing_evidence():
+    out = GroundedEvidenceResolver.resolve([], [_grounding_result("c1", _CHUNK_BODY)])
+    assert out.failure_reason == "missing_evidence"
+    assert out.citations == []
+
+
+def test_grounded_evidence_shape_errors():
+    results = [_grounding_result("c1", _CHUNK_BODY)]
+    assert GroundedEvidenceResolver.resolve(["not-a-dict"], results).failure_reason == "invalid_evidence_shape"
+    assert (
+        GroundedEvidenceResolver.resolve([{"chunk_id": "c1"}], results).failure_reason
+        == "invalid_evidence_shape"
+    )
+    assert (
+        GroundedEvidenceResolver.resolve(
+            [{"chunk_id": 5, "supporting_quote": "x" * 50}], results
+        ).failure_reason
+        == "invalid_evidence_shape"
+    )
+
+
+def test_grounded_evidence_chunk_not_retrieved():
+    results = [_grounding_result("c1", _CHUNK_BODY)]
+    out = GroundedEvidenceResolver.resolve(
+        [{"chunk_id": "other", "supporting_quote": _CHUNK_BODY[:60]}], results
+    )
+    assert out.failure_reason == "chunk_not_retrieved"
+
+
+def test_grounded_evidence_quote_length_bounds():
+    results = [_grounding_result("c1", _CHUNK_BODY + " " + "z" * 700)]
+    short = GroundedEvidenceResolver.resolve(
+        [{"chunk_id": "c1", "supporting_quote": "too short"}], results
+    )
+    assert short.failure_reason == "quote_too_short"
+    long_quote = "z" * 601
+    results_long = [_grounding_result("c1", "z" * 800)]
+    out_long = GroundedEvidenceResolver.resolve(
+        [{"chunk_id": "c1", "supporting_quote": long_quote}], results_long
+    )
+    assert out_long.failure_reason == "quote_too_long"
+
+
+def test_grounded_evidence_quote_not_a_substring():
+    results = [_grounding_result("c1", _CHUNK_BODY)]
+    out = GroundedEvidenceResolver.resolve(
+        [{"chunk_id": "c1", "supporting_quote": "the QC unit paraphrased differently for at least forty chars"}],
+        results,
+    )
+    assert out.failure_reason == "quote_not_found"
+
+
+def test_grounded_evidence_fail_closed_on_any_bad_item():
+    results = [_grounding_result("c1", _CHUNK_BODY)]
+    good = {"chunk_id": "c1", "supporting_quote": _CHUNK_BODY[:80]}
+    bad = {"chunk_id": "c1", "supporting_quote": "nope " * 20}
+    out = GroundedEvidenceResolver.resolve([good, bad], results)
+    assert out.failure_reason == "quote_not_found"
+    assert out.citations == []
 
 
 def test_expand_query_passthrough_when_no_glossary_key():

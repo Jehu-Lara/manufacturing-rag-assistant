@@ -25,6 +25,23 @@ def format_citations(citations: list[dict[str, Any]], lang: str) -> str:
     return "\n".join(lines)
 
 
+def _gate_caption(labels: dict[str, str], response: dict[str, Any]) -> str:
+    """Technical legend only. Shows both gate limits and the band the answer
+    came from, so a grounded-review answer is never presented as high
+    confidence."""
+    parts = [
+        f"{labels['confidence_label']}: {response.get('confidence')}",
+        f"{labels['threshold_label']}: {response.get('threshold')}",
+    ]
+    review_floor = response.get("review_floor")
+    if review_floor is not None:
+        parts.append(f"{labels['review_floor_label']}: {review_floor}")
+    gate_band = response.get("gate_band")
+    if gate_band:
+        parts.append(f"{labels['gate_band_label']}: {gate_band}")
+    return " | ".join(parts)
+
+
 def render_result(
     labels: dict[str, str], lang: str, last_response: Optional[dict[str, Any]], last_error: Optional[str]
 ) -> None:
@@ -42,9 +59,7 @@ def render_result(
         st.write(last_response["answer"])
         st.subheader(labels["citations_heading"])
         st.markdown(format_citations(last_response["citations"], lang))
-        confidence = last_response.get("confidence")
-        threshold = last_response.get("threshold")
-        st.caption(f"{labels['confidence_label']}: {confidence} | {labels['threshold_label']}: {threshold}")
+        st.caption(_gate_caption(labels, last_response))
     elif state == "refused":
         st.warning(f"**{labels['refused_badge']}** — {labels['refused_heading']}")
         st.write(last_response["answer"])
