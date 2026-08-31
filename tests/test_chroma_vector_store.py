@@ -162,6 +162,36 @@ def test_stale_candidate_collection_is_discarded_before_new_build(tmp_path):
     assert set(live.get()["ids"]) == {c.chunk_id for c in FIXTURE_CHUNKS}
 
 
+def test_promote_rename_failure_restores_live_collection_from_previous(tmp_path, monkeypatch):
+    _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS[:1])
+
+    real_promote = ChromaVectorStore._promote
+
+    def promote_with_failing_candidate_rename(self, client, candidate, previous_name):
+        def boom(**kwargs):
+            raise RuntimeError("simulated candidate->live rename failure")
+
+        candidate.modify = boom
+        return real_promote(self, client, candidate, previous_name)
+
+    monkeypatch.setattr(ChromaVectorStore, "_promote", promote_with_failing_candidate_rename)
+
+    with pytest.raises(RuntimeError):
+        _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS)
+
+    client = _client(tmp_path)
+    live = client.get_collection(COLLECTION_NAME)
+    assert live.count() == 1
+    assert set(live.get()["ids"]) == {FIXTURE_CHUNKS[0].chunk_id}
+    assert f"{COLLECTION_NAME}__previous" not in _collection_names(client)
+
+    # the orphaned __candidate is intentionally left for the next build's
+    # stale-candidate sweep — a subsequent successful build clears everything.
+    monkeypatch.setattr(ChromaVectorStore, "_promote", real_promote)
+    _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS)
+    assert _collection_names(_client(tmp_path)) == {COLLECTION_NAME}
+
+
 def test_successful_rebuild_swaps_cleanly_leaving_no_side_collections(tmp_path):
     store = _store(tmp_path, RecordingEmbedder())
     store.build_collection(FIXTURE_CHUNKS[:1])
