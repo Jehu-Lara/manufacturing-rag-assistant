@@ -210,9 +210,9 @@ with its own plan.
 
 Rebuild `raw-v1` from the same frozen `ingestion/output/chunks.jsonl` and the
 same pinned model revision (`5617a9f61b028005a4858fdac845db406aefb181`) via
-`python -m src.features.retrieval.cli`, selecting the `raw-v1` profile. The
-`raw-v1` build path is kept and tested for exactly this reason — it still embeds
-raw bodies.
+`INDEX_PROFILE=raw-v1 python -m src.features.retrieval.cli` (the bare command now
+builds `contextual-v1`). The `raw-v1` build path is kept and tested for exactly
+this reason — it still embeds raw bodies.
 
 If promotion fails mid-swap, `manufacturing_chunks__previous` is renamed back to
 live and the error re-raised; the previous live collection stays queryable and

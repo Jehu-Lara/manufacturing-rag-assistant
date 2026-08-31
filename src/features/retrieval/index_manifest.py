@@ -110,6 +110,10 @@ def read(path: Path = MANIFEST_FILE) -> IndexManifest:
     missing = [field for field in _MANIFEST_FIELDS if field not in data]
     if missing:
         raise ValueError(f"{path} is missing manifest fields: {missing}")
+    if data["index_profile"] not in ("raw-v1", "contextual-v1"):
+        raise ValueError(f"{path} has an invalid index_profile: {data['index_profile']!r}")
+    if not isinstance(data["chunk_count"], int) or isinstance(data["chunk_count"], bool):
+        raise ValueError(f"{path} has a non-int chunk_count: {data['chunk_count']!r}")
     return IndexManifest(**{field: data[field] for field in _MANIFEST_FIELDS})
 
 

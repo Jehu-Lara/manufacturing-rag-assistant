@@ -171,6 +171,26 @@ def test_manifest_write_holds_the_required_fields(tmp_path: Path):
     }
 
 
+def test_manifest_read_rejects_unknown_index_profile(tmp_path: Path):
+    path = tmp_path / "index_manifest.json"
+    index_manifest.write(_manifest(), path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["index_profile"] = "bogus-v9"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="index_profile"):
+        index_manifest.read(path)
+
+
+def test_manifest_read_rejects_non_int_chunk_count(tmp_path: Path):
+    path = tmp_path / "index_manifest.json"
+    index_manifest.write(_manifest(), path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["chunk_count"] = "228"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="chunk_count"):
+        index_manifest.read(path)
+
+
 def test_manifest_verify_passes_when_stored_hashes_match_live_inputs(tmp_path: Path):
     _write_mini_corpus(tmp_path)
     chunks_file = tmp_path / "chunks.jsonl"

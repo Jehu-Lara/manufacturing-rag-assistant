@@ -241,6 +241,24 @@ def test_retrieval_detail_record_shape_and_nulls() -> None:
 
     record = retrieval_eval._retrieval_detail_record(question, row)
 
+    # Invariant: the machine-readable JSONL carries no query text / prompt / answer.
+    assert set(record) == {
+        "id",
+        "lang",
+        "top5",
+        "gate_decision",
+        "expected_document_id",
+        "expected_chunk_ids",
+    }
+    assert set(record["top5"][0]) == {
+        "chunk_id",
+        "rank",
+        "semantic_score",
+        "semantic_rank",
+        "bm25_rank",
+        "fused_score",
+    }
+
     assert record["id"] == "q001"
     assert record["lang"] == "en"
     assert record["gate_decision"] == "answer"

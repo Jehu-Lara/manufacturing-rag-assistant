@@ -6,20 +6,28 @@ import pytest
 
 import src.features.retrieval.cli as cli_module
 from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
+from src.adapters.secondary.vector.chroma_vector_store import contextual_embedding_input
 from src.domain.models import ChunkMetadata
 from src.features.retrieval import index_manifest
 from src.features.retrieval.cli import load_chunks
 from tests.fakes import RecordingEmbedder
 
 
-def test_model_max_seq_length_covers_every_real_corpus_chunk():
+@pytest.mark.parametrize("profile", ["raw-v1", "contextual-v1"])
+def test_model_max_seq_length_covers_every_real_corpus_chunk(profile: str):
     # Guards a model disqualified by its OWN tokenizer's max_seq_length,
     # checked against real chunks — not against tiktoken's cl100k_base count
     # (which disagrees with this model's tokenizer and is not what would
-    # actually truncate).
+    # actually truncate). contextual-v1 (the shipped default) embeds the longer
+    # heading-prefixed input, so both profiles' inputs must fit.
     chunks = load_chunks()
     embedder = SentenceTransformersEmbedder()
-    embedder.assert_fits_max_seq_length([chunk.chunk_text for chunk in chunks])
+    inputs = (
+        [contextual_embedding_input(c) for c in chunks]
+        if profile == "contextual-v1"
+        else [c.chunk_text for c in chunks]
+    )
+    embedder.assert_fits_max_seq_length(inputs)
 
 
 def test_tokenized_length_is_positive_for_nonempty_text():

@@ -349,6 +349,18 @@ Failure classification (answerable subset, n=80; deterministic classifier over t
 
 ES Recall@5 0.812 and gate-over-refusals down to 3, but the API-610 regression controls go **0/3** correctly refused (worse than `raw-v1` / `semantic`'s 1/3) — query expansion lifts the planted on-topic-looking unanswerables over the gate. Disqualifying against the no-silent-hallucination standard. `expansion_mode` stays `"off"` in production.
 
+### 7.4 Artifact naming
+
+Two naming schemes coexist in `eval/reports/`. The Phase-1 mode-only names
+(`retrieval_report_v1.1.0__{off,semantic,lexical,both}.md`, `regression_eval_v1.1.0.md`,
+`threshold_analysis_v1.1.0.md`, and the unsuffixed `retrieval_report_v1.1.0.md`
+canonical alias) are **frozen Phase-1 artifacts** — do not regenerate them. All
+Phase-2-onward output uses the `*__<index_profile>__<expansion_mode>.*` scheme
+minted by `src/features/evaluation/artifacts.py` (`artifact_filename`), e.g.
+`retrieval_report_v1.1.0__contextual-v1__off.md`,
+`classification_v1.1.0__contextual-v1__off.md`. The dataset version (`v1.1.0`)
+never moves; profile and mode are suffix axes, not version bumps.
+
 ## 8. DECISION (Phase 2)
 
 > **SHIP `contextual-v1` as the new production index profile, `expansion_mode` staying `"off"`.** It clears the ES Recall@5 ship gate (0.781 → 0.844) with no regression to English retrieval, gate-only refusal precision, the API-610 controls, or the citation/prompt payload. The remaining gate-over-refusals — including the user-reported `r001`/`r002` — are a separate gate-calibration problem and move to a dedicated Phase 3 plan.
@@ -397,4 +409,4 @@ RESIDUAL_RISKS:
 
 ### Not done, deliberately
 
-No push, no PR merge, no deploy, no `REFUSAL_COSINE_THRESHOLD` change, no `expansion_mode` default change, no `.env` edit, no corpus change, no `*_v1.0.0*` / Phase-1 `*_v1.1.0*` baseline modification. Deployment remains a separate `DEPLOY`-gated manual operation.
+No push, no PR merge, no deploy, no `REFUSAL_COSINE_THRESHOLD` change, no `expansion_mode` default change, no `.env` edit, no corpus change, no `*_v1.0.0*` modification; the one Phase-1 `*_v1.1.0*` artifact touched is `classification_v1.1.0__raw-v1__off.md`, regenerated machine-only from the committed JSONL with identical counts (15/9/2/0). Deployment remains a separate `DEPLOY`-gated manual operation.
