@@ -3,15 +3,27 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, cast
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# Same path as src.features.retrieval.index_manifest.CHUNKS_FILE, redefined
+# locally so the integrity guard never pulls in the embedder import chain.
+CHUNKS_FILE = _REPO_ROOT / "ingestion" / "output" / "chunks.jsonl"
 
 # gate_holdout_v1.0.0.json stays at eval/ alongside eval_set.json and
 # regression_queries.json — a frozen holdout is data, not application code, and
 # is never packaged under src/ (mirrors eval_set_integrity /
 # regression_set_integrity). The hash is over the parsed `questions`, not raw
 # bytes, so reformatting the file without touching content keeps it valid.
-GATE_HOLDOUT_FILE = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "gate_holdout_v1.0.0.json"
+GATE_HOLDOUT_FILE = _REPO_ROOT / "eval" / "gate_holdout_v1.0.0.json"
+
+REQUIRED_TOTAL = 48
+REQUIRED_PER_CLASS = 24
+REQUIRED_PER_LANGUAGE = 24
+_LANGUAGES = ("en", "es")
+_COMMON_FIELDS = ("id", "question", "language", "answerable")
 
 
 def canonical_questions_bytes(questions: list[dict[str, Any]]) -> bytes:
@@ -27,7 +39,88 @@ def load_gate_holdout(path: Path = GATE_HOLDOUT_FILE) -> dict[str, Any]:
         return cast("dict[str, Any]", json.load(f))
 
 
-def verify(path: Path = GATE_HOLDOUT_FILE) -> None:
+def _known_chunk_ids(chunks_path: Path) -> set[str]:
+    ids: set[str] = set()
+    for line in chunks_path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            ids.add(json.loads(line)["chunk_id"])
+    return ids
+
+
+def _require_nonempty_str(question: dict[str, Any], field: str, where: str) -> None:
+    value = question.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{where}: missing/empty required field {field!r}")
+
+
+def _validate_question(question: dict[str, Any], known_chunk_ids: set[str]) -> None:
+    qid = question.get("id", "<no id>")
+    where = f"gate holdout question {qid!r}"
+    for field in _COMMON_FIELDS:
+        if field not in question:
+            raise ValueError(f"{where}: missing required field {field!r}")
+    _require_nonempty_str(question, "id", where)
+    _require_nonempty_str(question, "question", where)
+    if question["language"] not in _LANGUAGES:
+        raise ValueError(f"{where}: language must be one of {_LANGUAGES}")
+    if not isinstance(question["answerable"], bool):
+        raise ValueError(f"{where}: 'answerable' must be a bool")
+
+    if question["answerable"]:
+        expected = question.get("expected_chunk_ids")
+        if not isinstance(expected, list) or not expected:
+            raise ValueError(f"{where}: answerable question needs a non-empty 'expected_chunk_ids'")
+        for chunk_id in expected:
+            if not isinstance(chunk_id, str) or not chunk_id.strip():
+                raise ValueError(f"{where}: 'expected_chunk_ids' has an empty entry")
+            if known_chunk_ids and chunk_id not in known_chunk_ids:
+                raise ValueError(f"{where}: expected_chunk_id {chunk_id!r} is not in chunks.jsonl")
+        _require_nonempty_str(question, "expected_answer", where)
+    else:
+        _require_nonempty_str(question, "absence_note", where)
+
+
+def validate_composition(data: dict[str, Any], *, chunks_path: Path = CHUNKS_FILE) -> None:
+    """Structural gate: a green integrity check must mean a real, frozen,
+    balanced 48-question holdout — never an empty draft."""
+    if data.get("status") != "frozen":
+        raise ValueError(
+            "gate holdout status must be 'frozen' before it can be used - "
+            "author the questions and run `gate_holdout_integrity --write`"
+        )
+    questions = data.get("questions")
+    if not isinstance(questions, list) or len(questions) != REQUIRED_TOTAL:
+        raise ValueError(
+            f"gate holdout must have exactly {REQUIRED_TOTAL} questions, "
+            f"got {len(questions) if isinstance(questions, list) else 'non-list'}"
+        )
+
+    ids = [q.get("id") for q in questions]
+    duplicates = [item for item, count in Counter(ids).items() if count > 1]
+    if duplicates:
+        raise ValueError(f"gate holdout has duplicate ids: {duplicates}")
+
+    known_chunk_ids = _known_chunk_ids(chunks_path) if chunks_path.exists() else set()
+    for question in questions:
+        _validate_question(question, known_chunk_ids)
+
+    answerable = sum(1 for q in questions if q["answerable"] is True)
+    unanswerable = sum(1 for q in questions if q["answerable"] is False)
+    if answerable != REQUIRED_PER_CLASS or unanswerable != REQUIRED_PER_CLASS:
+        raise ValueError(
+            f"gate holdout must be {REQUIRED_PER_CLASS} answerable / "
+            f"{REQUIRED_PER_CLASS} unanswerable, got {answerable}/{unanswerable}"
+        )
+
+    by_language = Counter(q["language"] for q in questions)
+    if any(by_language.get(lang) != REQUIRED_PER_LANGUAGE for lang in _LANGUAGES):
+        raise ValueError(
+            f"gate holdout must be {REQUIRED_PER_LANGUAGE} EN / {REQUIRED_PER_LANGUAGE} ES, "
+            f"got {dict(by_language)}"
+        )
+
+
+def verify(path: Path = GATE_HOLDOUT_FILE, *, chunks_path: Path = CHUNKS_FILE) -> None:
     data = load_gate_holdout(path)
     expected = data["sha256"]
     actual = compute_hash(data["questions"])
@@ -37,6 +130,7 @@ def verify(path: Path = GATE_HOLDOUT_FILE) -> None:
             "If this edit was intentional, bump 'version' and re-run "
             "`python -m src.features.evaluation.gate_holdout_integrity --write`."
         )
+    validate_composition(data, chunks_path=chunks_path)
 
 
 def write(path: Path = GATE_HOLDOUT_FILE) -> None:
@@ -56,10 +150,10 @@ def main() -> None:
 
     if args.verify:
         verify()
-        print(f"{GATE_HOLDOUT_FILE}: hash OK")
+        print(f"{GATE_HOLDOUT_FILE}: hash + composition OK")
     else:
         write()
-        print(f"{GATE_HOLDOUT_FILE}: hash regenerated")
+        print(f"{GATE_HOLDOUT_FILE}: hash regenerated (composition NOT checked; run --verify)")
 
 
 if __name__ == "__main__":

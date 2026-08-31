@@ -9,7 +9,12 @@ from src.core.config import Settings, load_settings
 from src.domain.models import RetrievalResult
 from src.features.query.use_cases import QueryUseCase
 from src.main import app
+from tests.conftest import REQUIRES_BUILT_INDEX_REASON, built_retrieval_index_present
 from tests.fakes import InMemoryLLMClient, InMemoryRetriever, InMemoryVectorStore
+
+pytestmark = pytest.mark.skipif(
+    not built_retrieval_index_present(), reason=REQUIRES_BUILT_INDEX_REASON
+)
 
 
 @pytest.fixture

@@ -4,6 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.adapters.primary.http import app as app_module
+from tests.conftest import REQUIRES_BUILT_INDEX_REASON, built_retrieval_index_present
+
+pytestmark = pytest.mark.skipif(
+    not built_retrieval_index_present(), reason=REQUIRES_BUILT_INDEX_REASON
+)
 
 
 def _raise(message: str):

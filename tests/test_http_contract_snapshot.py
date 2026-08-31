@@ -10,6 +10,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from tests.conftest import REQUIRES_BUILT_INDEX_REASON, built_retrieval_index_present
+
+pytestmark = pytest.mark.skipif(
+    not built_retrieval_index_present(), reason=REQUIRES_BUILT_INDEX_REASON
+)
+
 SNAPSHOT_PATH = Path(__file__).resolve().parent / "snapshots" / "http_contract_phase0.json"
 REQUEST_ID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
 
