@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME
+from src.core.config import DEFAULT_REFUSAL_COSINE_THRESHOLD
 from src.domain.models import ExpansionMode, IndexProfile, RetrievalResult
+from src.domain.policies import RefusalPolicy
 from src.features.evaluation import artifacts, eval_set_integrity, metrics
 from src.features.evaluation._eval_retriever import build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
@@ -28,6 +31,7 @@ def _score_answerable(retriever: HybridRetriever, question: dict[str, Any]) -> d
         "id": question["id"],
         "language": question["language"],
         "retrieved": results,
+        "gate_confident": RefusalPolicy(DEFAULT_REFUSAL_COSINE_THRESHOLD).is_confident(results),
         "recall@3": metrics.recall_at_k(retrieved_ids, question["expected_chunk_ids"], 3),
         "recall@5": metrics.recall_at_k(retrieved_ids, question["expected_chunk_ids"], 5),
         # Scoped to the original top-5 window (retrieve() used to be called with
@@ -36,6 +40,46 @@ def _score_answerable(retriever: HybridRetriever, question: dict[str, Any]) -> d
         "rr": metrics.reciprocal_rank(retrieved_ids[:5], question["expected_chunk_ids"]),
         "top1_semantic_score": metrics.top1_semantic_score(results),
     }
+
+
+def _retrieval_detail_record(question: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
+    """Machine-readable per-question top-5 dump. Absent semantic/BM25 ranks and
+    scores are JSON `null`, never invented zeros. No query text, generated
+    answers, prompts, or secrets — only what a deterministic failure classifier
+    needs."""
+    top5: list[dict[str, Any]] = []
+    for rank, result in enumerate(row["retrieved"][:5], start=1):
+        top5.append(
+            {
+                "chunk_id": result.chunk_id,
+                "rank": rank,
+                "semantic_score": result.semantic_score,
+                "semantic_rank": result.semantic_rank,
+                "bm25_rank": result.bm25_rank,
+                "fused_score": result.fused_score,
+            }
+        )
+    return {
+        "id": question["id"],
+        "lang": question["language"],
+        "top5": top5,
+        "gate_decision": "answer" if row["gate_confident"] else "refuse",
+        "expected_document_id": question["expected_document_id"],
+        "expected_chunk_ids": question["expected_chunk_ids"],
+    }
+
+
+def _write_retrieval_details(
+    path: Path, answerable: list[dict[str, Any]], answerable_rows: list[dict[str, Any]]
+) -> None:
+    row_by_id = {row["id"]: row for row in answerable_rows}
+    payload = "\n".join(
+        json.dumps(_retrieval_detail_record(q, row_by_id[q["id"]]), ensure_ascii=False)
+        for q in answerable
+    )
+    tmp_path = path.parent / (path.name + ".tmp")
+    tmp_path.write_text(payload + "\n", encoding="utf-8", newline="\n")
+    tmp_path.replace(path)
 
 
 def _score_unanswerable(retriever: HybridRetriever, question: dict[str, Any]) -> dict[str, Any]:
@@ -250,6 +294,12 @@ def run(
         "retrieval_report", version, index_profile, expansion_mode, "md"
     )
     report_path.write_text(report, encoding="utf-8", newline="\n")
+
+    details_path = REPORT_DIR / artifacts.artifact_filename(
+        "retrieval_details", version, index_profile, expansion_mode, "jsonl"
+    )
+    _write_retrieval_details(details_path, answerable, answerable_rows)
+
     if write_canonical_alias:
         (REPORT_DIR / f"retrieval_report_v{version}.md").write_text(
             report, encoding="utf-8", newline="\n"
@@ -260,6 +310,7 @@ def run(
     print(f"Recall@5: {recall_at_5:.3f}")
     print(f"MRR: {metrics.mean_reciprocal_rank([row['rr'] for row in answerable_rows]):.3f}")
     print(f"Report written to: {report_path}")
+    print(f"Retrieval details written to: {details_path}")
 
     return report_path
 
