@@ -1,7 +1,7 @@
 <!-- provenance
 source: retrieval_details_v1.1.0__raw-v1__off.jsonl (per-question top-5 dump, deterministic classifier)
 classifier: src/features/evaluation/failure_classification.py::classify_failure
-generated: Phase 2 Task 3 — supersedes the Phase 1 hand-derived classification
+generated: raw-v1 / expansion_mode=off — deterministic classifier over retrieval_details_v1.1.0__raw-v1__off.jsonl
 method: for each answerable question, if it is a failure (recall@5 miss OR gate refuses a
   correctly-retrieved chunk), classify into one mutually-exclusive class:
   gate-over-refusal    = expected chunk IS in top-5 but the 0.5999 gate refuses
