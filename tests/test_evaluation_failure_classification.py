@@ -137,6 +137,44 @@ def test_run_over_synthetic_jsonl_counts_and_report(tmp_path: Path) -> None:
     assert "q1" not in text
 
 
+def test_report_header_reflects_the_runs_real_profile_and_mode(tmp_path: Path) -> None:
+    import json
+
+    records = [
+        {
+            "id": "q2",
+            "lang": "es",
+            "top5": _top5("doc-a::chunk-0003"),
+            "gate_decision": "refuse",
+            "expected_document_id": "doc-a",
+            "expected_chunk_ids": ["doc-a::chunk-0003"],
+        },
+    ]
+    details = tmp_path / "retrieval_details_v1.1.0__contextual-v1__semantic.jsonl"
+    details.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+    out = tmp_path / "classification.md"
+
+    fc.run(details, out)
+
+    text = out.read_text(encoding="utf-8")
+    assert (
+        "# Failure classification — eval_set v1.1.0, contextual-v1 index, expansion_mode=semantic"
+        in text
+    )
+    assert "raw-v1 index" not in text
+    assert "Phase 2 Task 3" not in text
+
+
+def test_profile_mode_from_details_name_defaults_on_unrecognized() -> None:
+    assert fc._profile_mode_from_details_name("classification.md") == ("raw-v1", "off")
+    assert (
+        fc._profile_mode_from_details_name(
+            "retrieval_details_v1.1.0__contextual-v1__both.jsonl"
+        )
+        == ("contextual-v1", "both")
+    )
+
+
 def test_committed_jsonl_still_yields_the_frozen_counts() -> None:
     """CI guard: if the committed retrieval-details JSONL is ever regenerated,
     the failure-class counts must still be 15/9/2/0 (the frozen Phase-1 ruling).

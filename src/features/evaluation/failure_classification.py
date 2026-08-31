@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,16 @@ EXPECTED_COUNTS: dict[str, int] = {
     "cross-document-decoy": 2,
     "retrieval-miss": 0,
 }
+
+
+_DETAILS_NAME_RE = re.compile(r"__(raw-v1|contextual-v1)__(off|semantic|lexical|both)\.jsonl$")
+
+
+def _profile_mode_from_details_name(name: str) -> tuple[str, str]:
+    match = _DETAILS_NAME_RE.search(name)
+    if match is None:
+        return ("raw-v1", "off")
+    return (match.group(1), match.group(2))
 
 
 def _document_of(chunk_id: str) -> str:
@@ -117,6 +128,11 @@ def build_report(
 ) -> str:
     counts = count_classes(classified)
     answerable_n = len(records)
+    index_profile, expansion_mode = _profile_mode_from_details_name(details_path.name)
+    provenance_line = (
+        f"generated: {index_profile} / expansion_mode={expansion_mode} — "
+        f"deterministic classifier over {details_path.name}"
+    )
     decoy_rows = [r for r in classified if r["class"].endswith("decoy")]
     gate_rows = [r for r in classified if r["class"] == "gate-over-refusal"]
 
@@ -124,7 +140,7 @@ def build_report(
         "<!-- provenance",
         f"source: {details_path.name} (per-question top-5 dump, deterministic classifier)",
         "classifier: src/features/evaluation/failure_classification.py::classify_failure",
-        "generated: Phase 2 Task 3 — supersedes the Phase 1 hand-derived classification",
+        provenance_line,
         "method: for each answerable question, if it is a failure (recall@5 miss OR gate refuses a",
         "  correctly-retrieved chunk), classify into one mutually-exclusive class:",
         "  gate-over-refusal    = expected chunk IS in top-5 but the 0.5999 gate refuses",
@@ -133,7 +149,7 @@ def build_report(
         "  retrieval-miss       = expected document absent from top-5",
         "-->",
         "",
-        "# Failure classification — eval_set v1.1.0, raw-v1 index, expansion_mode=off",
+        f"# Failure classification — eval_set v1.1.0, {index_profile} index, expansion_mode={expansion_mode}",
         "",
         "Reproducible from committed machine-readable evidence: regenerate with",
         "`python -m src.features.evaluation.failure_classification`.",
