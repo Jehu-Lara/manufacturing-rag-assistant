@@ -3,7 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from src.features.evaluation import failure_classification as fc
+
+_COMMITTED_DETAILS = (
+    Path(__file__).resolve().parent.parent
+    / "eval"
+    / "reports"
+    / "retrieval_details_v1.1.0__raw-v1__off.jsonl"
+)
 
 
 def _entry(chunk_id: str, rank: int) -> dict[str, Any]:
@@ -126,3 +135,21 @@ def test_run_over_synthetic_jsonl_counts_and_report(tmp_path: Path) -> None:
     assert "# Failure classification" in text
     assert "q2" in text and "q3" in text
     assert "q1" not in text
+
+
+def test_committed_jsonl_still_yields_the_frozen_counts() -> None:
+    """CI guard: if the committed retrieval-details JSONL is ever regenerated,
+    the failure-class counts must still be 15/9/2/0 (the frozen Phase-1 ruling).
+    """
+    if not _COMMITTED_DETAILS.exists():
+        pytest.skip("committed retrieval_details JSONL not present in this checkout")
+
+    records = fc.load_details(_COMMITTED_DETAILS)
+    counts = fc.count_classes(fc.classify_details(records))
+
+    assert counts == fc.EXPECTED_COUNTS == {
+        "gate-over-refusal": 15,
+        "same-document-decoy": 9,
+        "cross-document-decoy": 2,
+        "retrieval-miss": 0,
+    }

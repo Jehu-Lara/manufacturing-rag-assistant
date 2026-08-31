@@ -105,4 +105,4 @@ def run(
 if __name__ == "__main__":
     _modes: tuple[ExpansionMode, ...] = ("off", "semantic", "lexical", "both")
     for _mode in _modes:
-        run(_mode, write_canonical_alias=(_mode == "off"))
+        run(_mode, index_profile="raw-v1")
