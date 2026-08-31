@@ -279,3 +279,122 @@ But `semantic` still does not ship, for three independent reasons:
 
 No push, no PR, no deploy, no threshold change, no production-default change, no `.env` edit,
 no corpus change, no `*_v1.0.0.md` modification.
+
+---
+
+# Phase 2 — contextual chunk embedding (`contextual-v1`): measurement + decision
+
+- **Date basis:** commit `8d7cecd` (production-default flip) on `fix/bilingual-refusal-phase2`; measurements from `eval/reports/*_v1.1.0__contextual-v1__*` (index build commit `ee928ae`).
+- **Index built:** `contextual-v1` — each chunk embedded as `f"{document_title} > {section_heading}\n\n{chunk_text}"`; `documents=` and `metadata["chunk_text"]` stored **byte-identical to raw** (`tests/test_chroma_vector_store.py`). BM25 unchanged. Manifest: `index_profile=contextual-v1`, `chunks_sha256=dd7d21b5…`, `corpus_sha256=2fc786ca…`, `embedding_revision=5617a9f6…`.
+- **`REFUSAL_COSINE_THRESHOLD` `0.5999`, RRF `k=60`, `expansion_mode` default `off` — all unchanged.**
+- **`generation_eval`: NOT run.** The owner elected to close Phase 2 gate-only (Groq free tier 429s a 105-question run; §2). **Every correct-/false-refusal figure below is the gate-only proxy** (refuse ⇔ top-1 pure-semantic cosine < 0.5999) and is **UNVERIFIED**, not passed — the §2 calibration (proxy understates both false- and correct-refusal) still applies. This section does not claim generation quality or citation integrity were re-validated on `contextual-v1`.
+- **ADR:** `docs/adr/008-contextual-chunk-embedding.md` (Accepted 2026-08-30).
+
+## 7. Four-config comparison
+
+Retrieval (eval_set v1.1.0 — 80 answerable [EN 48 / ES 32], 25 unanswerable). **H** = hard acceptance cell.
+
+| config | EN R@3 | EN R@5 (**H** ≥ 0.913) | ES R@3 | ES R@5 (**H** ≥ 0.80) | pooled R@3 | pooled R@5 | pooled MRR |
+|---|---|---|---|---|---|---|---|
+| `raw-v1` / `off` (previous production) | 0.792 | 0.917 ✅ | 0.625 | **0.781 ❌** | 0.725 | 0.863 | 0.660 |
+| `raw-v1` / `semantic` (Phase 1) | 0.812 | 0.917 ✅ | 0.656 | **0.781 ❌** | 0.750 | 0.863 | 0.669 |
+| **`contextual-v1` / `off`** (new production) | 0.896 | **0.917 ✅** | 0.719 | **0.844 ✅** | 0.825 | 0.887 | 0.721 |
+| `contextual-v1` / `semantic` | 0.917 | 0.917 ✅ | 0.688 | 0.812 ✅ | 0.825 | 0.875 | 0.711 |
+
+Refusal — **gate-only proxy at 0.5999, UNVERIFIED**:
+
+| config | answerable wrongly refused (pooled) | — EN (**H** ≤ 0.10) | — ES (soft) | unanswerable correctly refused (pooled) | matched-pair gap (evidence, ≤ 0.05) |
+|---|---|---|---|---|---|
+| `raw-v1` / `off` | 18/80 = 0.225 | 6/48 = 0.125 ⚠️ | 12/32 = 0.375 ⚠️ | 21/25 = 0.84 ⚠️ | +0.0426 ✅ |
+| **`contextual-v1` / `off`** | 9/80 = 0.113 | 3/48 = 0.063 ⚠️ | 6/32 = 0.188 ⚠️ | 21/25 = 0.84 ⚠️ | +0.0449 ✅ |
+| `contextual-v1` / `semantic` | 3/80 = 0.038 | 1/48 = 0.021 ⚠️ | 2/32 = 0.063 ⚠️ | 21/25 = 0.84 ⚠️ | +0.0298 ✅ |
+
+⚠️ = gate-only proxy; the metric's real value was not measured and is **not** a pass.
+
+Frozen regression set (20 queries) — gate-only:
+
+| config | answerable passing gate | API-610 controls `r018`/`r019`/`r020` correctly refused | `r001` (en) → gate | `r002` (es) → gate |
+|---|---|---|---|---|
+| `raw-v1` / `off` (Phase 1 frozen baseline) | 9/17 | **3/3 ✅** | 0.5582 → REFUSE | 0.5598 → REFUSE |
+| `raw-v1` / `semantic` (Phase 1) | 14/17 | **1/3 ❌** | 0.7195 → answer | 0.7193 → answer |
+| **`contextual-v1` / `off`** | 11/17 | **3/3 ✅** | 0.5642 → REFUSE | 0.5656 → REFUSE |
+| `contextual-v1` / `semantic` | 17/17 | **0/3 ❌** | 0.7128 → answer | 0.7124 → answer |
+
+Failure classification (answerable subset, n=80; deterministic classifier over the committed per-question JSONL):
+
+| config | gate-over-refusal | same-document-decoy | cross-document-decoy | retrieval-miss |
+|---|---|---|---|---|
+| `raw-v1` / `off` | 15 | 9 | 2 | **0** |
+| **`contextual-v1` / `off`** | 8 | 6 | 3 | **0** |
+| `contextual-v1` / `semantic` | 3 | 7 | 3 | **0** |
+
+(`raw-v1` / `semantic` was not re-run through the JSONL classifier; Phase 1 §5b records it as 8 gate-over-refusals + 11 decoys.)
+
+### 7.1 What `contextual-v1` / `off` does
+
+- **Clears the ES Recall@5 ship gate: 0.781 → 0.844** (`q018`, `q067` recovered from same-document decoys). This was the central Phase 2 objective.
+- **Holds every other hard retrieval cell.** EN Recall@5 flat at 0.917 (≥ 0.913). Pooled R@3 0.725 → 0.825, MRR 0.660 → 0.721 — the heading path gives the embedder the section-discrimination signal it lacked (ADR-008 hypothesis confirmed on the frozen evidence).
+- **No gate-only refusal-precision regression.** Unanswerable-correctly-refused flat at 21/25 pooled — identical to `raw-v1`. API-610 controls stay **3/3**. The prefix raises the cosine of answerable content without raising the cosine of the planted "looks on-topic, isn't in the corpus" queries.
+- **Halves the gate-only false-refusal proxy** (18/80 → 9/80 pooled; EN 6→3, ES 12→6) as a side effect of the cosine lift; recovers 7 of the 15 eval gate-over-refusals and regression `r009`/`r014`.
+- **Citation / prompt payload unchanged.** The contextual prefix never reaches Chroma `documents=`, `metadata["chunk_text"]`, the generation prompt, or `CitationResolver` — verified byte-for-byte by test.
+
+### 7.2 What it does NOT do
+
+- **`r001` / `r002` still refuse.** The target chunk `doe-hdbk-1018-1-pumps::chunk-0007` is retrieved (recall@5 = 1.0), but its top-1 cosine only moves 0.558 → 0.564, still below the 0.5999 gate. A **gate-calibration** problem, not a retrieval problem — ADR-008 "Consequences" explicitly routes the gate-over-refusals to Phase 3.
+- **8 gate-over-refusals remain** on the eval set (down from 15).
+- **3 cross-document decoys** (`q026`, `q050`, `q051`) — one more than `raw-v1` had; for `q026` a sibling section in another OSHA document now outranks the expected chunk. The weaker fit for C2, as ADR-008 predicted.
+- **The generation axis is unverified.** No `generation_eval` on `contextual-v1`.
+
+### 7.3 `contextual-v1` / `semantic` is rejected
+
+ES Recall@5 0.812 and gate-over-refusals down to 3, but the API-610 regression controls go **0/3** correctly refused (worse than `raw-v1` / `semantic`'s 1/3) — query expansion lifts the planted on-topic-looking unanswerables over the gate. Disqualifying against the no-silent-hallucination standard. `expansion_mode` stays `"off"` in production.
+
+## 8. DECISION (Phase 2)
+
+> **SHIP `contextual-v1` as the new production index profile, `expansion_mode` staying `"off"`.** It clears the ES Recall@5 ship gate (0.781 → 0.844) with no regression to English retrieval, gate-only refusal precision, the API-610 controls, or the citation/prompt payload. The remaining gate-over-refusals — including the user-reported `r001`/`r002` — are a separate gate-calibration problem and move to a dedicated Phase 3 plan.
+
+Decision-branch mapping (plan Task 9):
+- **SHIP candidate** — `contextual-v1` / `off`. All hard **retrieval** cells pass. The hard **refusal** cells (EN correct-refusal ≥ 0.90, ES ≥ 0.80, EN false-refusal ≤ 0.10) were not measurable this run; they stay gate-only proxies exactly as at Phase 1 close, and the ship decision rests on the retrieval axis (ES Recall@5), per the plan's Task 0 note.
+- **Gate follow-up** — a separate **Phase 3** plan for the 8 gate-over-refusals: global-threshold re-analysis, a two-tier low-confidence response, and/or an evidence-supported per-language threshold. `r001`/`r002` are in scope there. **Do not** change `REFUSAL_COSINE_THRESHOLD` outside that plan.
+- **Not Ranking follow-up** — ES Recall@5 now ≥ 0.80 with 0 true retrieval misses, so multilingual sparse retrieval (Phase 2b) is not required to ship.
+- **Not Reject/rollback** — no English regression, no citation/payload change, no manifest mismatch, and the API-610 controls did not regress.
+
+### Fixed review format
+
+```text
+VEREDICTO: PASS_WITH_FIXES
+SEVERIDAD: P2
+BLOCKERS:
+  - none for shipping contextual-v1 on the retrieval axis.
+FIXES_REQUIRED:
+  - Refusal % cells stay labelled gate-only / UNVERIFIED. Do not describe the
+    contextual-v1 result as "generation-validated" or "production-validated" —
+    generation_eval was not run.
+  - Open the Phase 3 gate-calibration plan as its own increment before treating
+    r001/r002 as resolved.
+RESIDUAL_RISKS:
+  - r001/r002 and 6 other gate-over-refusals still refuse answerable questions
+    whose chunk was retrieved; the 0.5999 gate does not cleanly separate the
+    answerable/unanswerable cosine distributions (they overlap ~0.53-0.66).
+  - contextual-v1 generation answer quality and citation correctness are
+    unmeasured; the raw-chunk-payload invariant is test-verified but end-to-end
+    generation was not re-run.
+  - 3 cross-document decoys remain (one more than raw-v1) — the weaker fit for C2.
+```
+
+### Follow-up increments (none performed in this decision)
+
+1. **Phase 3 — gate calibration.** Its own plan + ADR + owner gate. Owns `r001`/`r002` and the 8 gate-over-refusals. `REFUSAL_COSINE_THRESHOLD` may only change there.
+2. **`generation_eval` on `contextual-v1` / `off`** once a non-rate-limited LLM path exists (paid Groq tier or the OpenAI fallback key). Fills the four ⚠️ refusal cells and re-checks citation correctness end-to-end.
+3. **`expansion_mode` on top of `contextual-v1`** — done for `semantic` (rejected, §7.3); `lexical`/`both` not re-run and not planned (Phase 1 ruled them out on retrieval evidence).
+
+### Shipped in the Task 9 increment
+
+- `src/features/retrieval/cli.py`: `INDEX_PROFILE` default `raw-v1` → `contextual-v1` (commit `8d7cecd`). Dockerfile + CI build the new profile by default; `INDEX_PROFILE=raw-v1` still rebuilds the rollback index.
+- `docs/adr/008-contextual-chunk-embedding.md`: Status `Proposed` → `Accepted`.
+- `SPEC.md`, `CLAUDE.md`: `contextual-v1` recorded as the production index profile; `expansion_mode` default unchanged; generation axis noted unverified.
+- The `contextual-v1` evaluation artifacts under `eval/reports/`.
+
+### Not done, deliberately
+
+No push, no PR merge, no deploy, no `REFUSAL_COSINE_THRESHOLD` change, no `expansion_mode` default change, no `.env` edit, no corpus change, no `*_v1.0.0*` / Phase-1 `*_v1.1.0*` baseline modification. Deployment remains a separate `DEPLOY`-gated manual operation.

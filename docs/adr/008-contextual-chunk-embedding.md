@@ -2,9 +2,21 @@
 
 ## Status
 
-Proposed on 2026-08-30. Written before the C2 implementation code and before the
-project owner's ship decision. Supersedes nothing; it adds a second selectable
-index profile alongside the current `raw-v1`.
+**Accepted 2026-08-30.** Proposed and written before the C2 implementation;
+then measured on the frozen `eval_set` v1.1.0 and approved by the project owner
+as the new production index profile
+(`docs/superpowers/specs/2026-08-29-bilingual-refusal-fix-results.md` §7–§8).
+Adds a second selectable index profile; `raw-v1` stays as the tested rollback
+path (`src/features/retrieval/cli.py` still builds it under `INDEX_PROFILE=raw-v1`).
+
+`contextual-v1` / `off` cleared the frozen Spanish Recall@5 ship gate
+(0.781 → 0.844) with English Recall@5 flat at 0.917, no regression to the
+gate-only refusal proxy or the frozen API-610 regression controls (3/3 still
+refused), and a byte-identical citation/prompt payload. The
+`expansion_mode=semantic` variant was rejected (API-610 controls 0/3).
+`generation_eval` was **not** run — the correct-/false-refusal cells stay
+gate-only and unverified. The 8 remaining gate-over-refusals (including the
+reported `r001`/`r002`) move to a separate Phase 3 gate-calibration plan.
 
 ## Context
 
