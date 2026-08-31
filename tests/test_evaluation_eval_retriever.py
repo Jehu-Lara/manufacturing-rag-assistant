@@ -35,4 +35,18 @@ def test_raises_mentioning_the_cli_when_manifest_absent(monkeypatch: pytest.Monk
 
 def test_returns_none_when_profiles_match(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(index_manifest, "read", lambda: _fake_manifest("raw-v1"))
+    monkeypatch.setattr(index_manifest, "verify", lambda: None)
     assert assert_live_index_profile("raw-v1") is None
+
+
+def test_propagates_value_error_when_profile_matches_but_hashes_drifted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(index_manifest, "read", lambda: _fake_manifest("raw-v1"))
+
+    def _drifted() -> None:
+        raise ValueError("chunks_sha256 stored x, computed y")
+
+    monkeypatch.setattr(index_manifest, "verify", _drifted)
+    with pytest.raises(ValueError, match="chunks_sha256"):
+        assert_live_index_profile("raw-v1")

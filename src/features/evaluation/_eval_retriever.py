@@ -33,3 +33,4 @@ def assert_live_index_profile(expected: IndexProfile) -> None:
             f"{expected!r}; rebuild with INDEX_PROFILE={expected} or pass the "
             f"matching index_profile"
         )
+    index_manifest.verify()
