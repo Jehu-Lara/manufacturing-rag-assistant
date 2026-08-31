@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from src.features.evaluation import artifacts
+
 REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
 
 CLASSES: tuple[str, ...] = (
@@ -33,7 +35,10 @@ _DETAILS_NAME_RE = re.compile(r"__(raw-v1|contextual-v1)__(off|semantic|lexical|
 def _profile_mode_from_details_name(name: str) -> tuple[str, str]:
     match = _DETAILS_NAME_RE.search(name)
     if match is None:
-        return ("raw-v1", "off")
+        raise ValueError(
+            f"cannot derive index_profile/expansion_mode from {name!r}; "
+            "pass a *__<profile>__<mode>.jsonl details file"
+        )
     return (match.group(1), match.group(2))
 
 
@@ -201,7 +206,10 @@ def run(
     out_path: Path | None = None,
 ) -> tuple[Path, dict[str, int]]:
     details_path = details_path or REPORT_DIR / "retrieval_details_v1.1.0__raw-v1__off.jsonl"
-    out_path = out_path or REPORT_DIR / "classification_v1.1.0__raw-v1__off.md"
+    profile, mode = _profile_mode_from_details_name(details_path.name)
+    out_path = out_path or REPORT_DIR / artifacts.artifact_filename(
+        "classification", "1.1.0", profile, mode, "md"
+    )
 
     records = load_details(details_path)
     classified = classify_details(records)

@@ -165,14 +165,41 @@ def test_report_header_reflects_the_runs_real_profile_and_mode(tmp_path: Path) -
     assert "Phase 2 Task 3" not in text
 
 
-def test_profile_mode_from_details_name_defaults_on_unrecognized() -> None:
-    assert fc._profile_mode_from_details_name("classification.md") == ("raw-v1", "off")
+def test_profile_mode_from_details_name_raises_on_unrecognized() -> None:
+    with pytest.raises(ValueError):
+        fc._profile_mode_from_details_name("classification.md")
     assert (
         fc._profile_mode_from_details_name(
             "retrieval_details_v1.1.0__contextual-v1__both.jsonl"
         )
         == ("contextual-v1", "both")
     )
+
+
+def test_run_derives_out_path_from_details_name_not_raw_v1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    monkeypatch.setattr(fc, "REPORT_DIR", tmp_path)
+    records = [
+        {
+            "id": "q2",
+            "lang": "es",
+            "top5": _top5("doc-a::chunk-0003"),
+            "gate_decision": "refuse",
+            "expected_document_id": "doc-a",
+            "expected_chunk_ids": ["doc-a::chunk-0003"],
+        },
+    ]
+    details = tmp_path / "retrieval_details_v1.1.0__contextual-v1__off.jsonl"
+    details.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+
+    out_path, _ = fc.run(details)
+
+    assert out_path == tmp_path / "classification_v1.1.0__contextual-v1__off.md"
+    assert out_path.name != "classification_v1.1.0__raw-v1__off.md"
+    assert out_path.exists()
 
 
 def test_committed_jsonl_still_yields_the_frozen_counts() -> None:
