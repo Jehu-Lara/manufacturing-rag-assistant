@@ -10,7 +10,7 @@ from src.core.config import DEFAULT_REFUSAL_COSINE_THRESHOLD
 from src.domain.models import ExpansionMode, IndexProfile, RetrievalResult
 from src.domain.policies import RefusalPolicy
 from src.features.evaluation import artifacts, eval_set_integrity, metrics
-from src.features.evaluation._eval_retriever import build_retriever
+from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
 REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
@@ -277,6 +277,7 @@ def run(
     version = data["version"]
     questions = data["questions"]
 
+    assert_live_index_profile(index_profile)
     retriever = build_retriever(expansion_mode)
     answerable = [q for q in questions if q["answerable"]]
     unanswerable = [q for q in questions if not q["answerable"]]

@@ -13,7 +13,7 @@ from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient
 from src.core.config import load_settings
 from src.domain.models import ExpansionMode, IndexProfile
 from src.features.evaluation import artifacts, eval_set_integrity, metrics
-from src.features.evaluation._eval_retriever import build_retriever
+from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.query.use_cases import QueryUseCase
 from src.features.retrieval.use_cases import HybridRetriever
 
@@ -250,6 +250,7 @@ def run(
     questions = data["questions"]
 
     if use_case is None or retriever is None:
+        assert_live_index_profile(index_profile)
         use_case, retriever = _build_use_case_and_retriever(expansion_mode)
     rows: list[dict[str, Any]] = []
     for question in questions:

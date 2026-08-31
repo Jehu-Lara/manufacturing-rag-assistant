@@ -90,6 +90,7 @@ def test_row_recall_is_none_for_control_queries_without_expected_chunk():
 def test_run_writes_report_with_expansion_mode_heading(tmp_path, monkeypatch):
     retriever = _ScriptedRetriever([_result("doc::chunk-0007", 0.7)])
     monkeypatch.setattr(regression_eval, "build_retriever", lambda mode: retriever)
+    monkeypatch.setattr(regression_eval, "assert_live_index_profile", lambda p: None)
     monkeypatch.setattr(regression_eval, "REPORT_DIR", tmp_path)
     monkeypatch.setattr(regression_eval.artifacts, "resolve_provenance", lambda ip, em: _FakeHeader())
 
@@ -108,6 +109,7 @@ def test_run_writes_report_with_expansion_mode_heading(tmp_path, monkeypatch):
 def test_run_off_and_semantic_produce_distinct_paths(tmp_path, monkeypatch):
     retriever = _ScriptedRetriever([_result("doc::chunk-0007", 0.7)])
     monkeypatch.setattr(regression_eval, "build_retriever", lambda mode: retriever)
+    monkeypatch.setattr(regression_eval, "assert_live_index_profile", lambda p: None)
     monkeypatch.setattr(regression_eval, "REPORT_DIR", tmp_path)
     monkeypatch.setattr(regression_eval.artifacts, "resolve_provenance", lambda ip, em: _FakeHeader())
 
@@ -123,6 +125,7 @@ def test_run_off_and_semantic_produce_distinct_paths(tmp_path, monkeypatch):
 def test_run_canonical_alias_guarded(tmp_path, monkeypatch):
     retriever = _ScriptedRetriever([_result("doc::chunk-0007", 0.7)])
     monkeypatch.setattr(regression_eval, "build_retriever", lambda mode: retriever)
+    monkeypatch.setattr(regression_eval, "assert_live_index_profile", lambda p: None)
     monkeypatch.setattr(regression_eval, "REPORT_DIR", tmp_path)
     monkeypatch.setattr(regression_eval.artifacts, "resolve_provenance", lambda ip, em: _FakeHeader())
 

@@ -35,6 +35,7 @@ def _patch_run(monkeypatch: Any, tmp_path: Path) -> None:
         },
     )
     monkeypatch.setattr(threshold_analysis, "build_retriever", lambda mode="off": object())
+    monkeypatch.setattr(threshold_analysis, "assert_live_index_profile", lambda p: None)
     scores = iter([0.80, 0.75, 0.20, 0.25])
     monkeypatch.setattr(threshold_analysis, "_top1_semantic_score", lambda r, q: next(scores))
     monkeypatch.setattr(

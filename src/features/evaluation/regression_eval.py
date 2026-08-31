@@ -7,7 +7,7 @@ from src.domain.models import ExpansionMode, IndexProfile
 from src.domain.policies import RefusalPolicy, top1_semantic_score_from_results
 from src.domain.ports import RetrieverPort
 from src.features.evaluation import artifacts, eval_set_integrity, regression_set_integrity
-from src.features.evaluation._eval_retriever import build_retriever
+from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.evaluation.metrics import recall_at_k
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K
 
@@ -65,6 +65,7 @@ def run(
         f"- threshold (diagnostic): {threshold}",
         "",
     ]
+    assert_live_index_profile(index_profile)
     retriever = build_retriever(expansion_mode)
     rows = [_row(retriever, q, threshold) for q in data["queries"]]
     lines += [

@@ -132,6 +132,7 @@ def _patch_run(monkeypatch: Any, tmp_path: Path) -> None:
         },
     )
     monkeypatch.setattr(retrieval_eval, "build_retriever", lambda mode: object())
+    monkeypatch.setattr(retrieval_eval, "assert_live_index_profile", lambda p: None)
     monkeypatch.setattr(
         retrieval_eval,
         "_score_answerable",
