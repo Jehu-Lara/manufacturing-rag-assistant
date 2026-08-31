@@ -51,14 +51,16 @@ jobs:
           python -m src.features.ingestion.cli
           python -m src.features.retrieval.cli
 
-      # RED BY DESIGN until the project owner authors + freezes the 48-question
-      # Phase 3 holdout (eval/gate_holdout_v1.0.0.json). A green integrity check
-      # over an empty draft would be a false guarantee — see ADR-009.
-      - name: Verify Phase 3 gate holdout
-        run: python -m src.features.evaluation.gate_holdout_integrity --verify
-
       - name: Verify contextual refusal score bands (r001/r002 in review band)
         run: python -m src.features.evaluation.gate_score_guard
 
       - name: Run tests
         run: pytest -v
+
+      # LAST on purpose: RED BY DESIGN until the project owner authors + freezes
+      # the 48-question Phase 3 holdout (eval/gate_holdout_v1.0.0.json). A green
+      # integrity check over an empty draft would be a false guarantee (ADR-009).
+      # Kept last so lint, mypy, the score guard and the full suite still run on
+      # every push while the holdout is unfrozen.
+      - name: Verify Phase 3 gate holdout
+        run: python -m src.features.evaluation.gate_holdout_integrity --verify
