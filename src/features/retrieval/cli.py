@@ -1,19 +1,16 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, SentenceTransformersEmbedder
 from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
 from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
 from src.core.config import load_settings
-from src.domain.models import ChunkMetadata, IndexProfile
+from src.domain.models import ChunkMetadata
 from src.features.retrieval import index_manifest
 
 CHUNKS_FILE = Path(__file__).resolve().parent.parent.parent.parent / "ingestion" / "output" / "chunks.jsonl"
-
-_VALID_PROFILES: tuple[IndexProfile, ...] = ("raw-v1", "contextual-v1")
 
 
 def load_chunks(path: Path = CHUNKS_FILE) -> list[ChunkMetadata]:
@@ -27,9 +24,7 @@ def load_chunks(path: Path = CHUNKS_FILE) -> list[ChunkMetadata]:
 
 
 def run() -> None:
-    profile = os.environ.get("INDEX_PROFILE", "contextual-v1")
-    if profile not in _VALID_PROFILES:
-        raise ValueError(f"INDEX_PROFILE must be one of {_VALID_PROFILES}, got {profile!r}")
+    profile = index_manifest.resolve_index_profile()
 
     settings = load_settings()
     chunks = load_chunks()

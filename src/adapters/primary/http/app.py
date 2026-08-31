@@ -18,6 +18,8 @@ from src.core.logging import configure as configure_logging
 from src.core.telemetry import configure_tracing
 from src.features.query.router import router
 from src.features.query.use_cases import QueryUseCase
+from src.features.retrieval import index_manifest
+from src.features.retrieval.cli import load_chunks
 from src.features.retrieval.use_cases import HybridRetriever
 
 logger = logging.getLogger(__name__)
@@ -33,9 +35,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = load_settings()
     configure_logging(level=settings.log_level)
 
+    profile = index_manifest.resolve_index_profile()
+    manifest = index_manifest.verify(expected_profile=profile)
+    chunks = load_chunks()
+
     embedder = SentenceTransformersEmbedder()
-    vector_store = ChromaVectorStore(persist_dir=settings.chroma_path, embedder=embedder)
+    vector_store = ChromaVectorStore(
+        persist_dir=settings.chroma_path, embedder=embedder, index_profile=profile
+    )
     lexical_index = Bm25LexicalIndex(persist_path=settings.bm25_path)
+
+    vector_store.validate_collection(
+        expected_profile=profile, expected_count=manifest.chunk_count
+    )
+    lexical_index.validate([chunk.chunk_id for chunk in chunks])
+
     retriever = HybridRetriever(vector_store, lexical_index)
     llm_client = GroqOpenAiLlmClient()
 

@@ -52,6 +52,17 @@ class Bm25LexicalIndex:
         self._bm25 = BM25Okapi(data["corpus_tokens"])
         return self._chunk_ids, self._bm25
 
+    def validate(self, expected_chunk_ids: list[str]) -> None:
+        """Startup guard: the persisted BM25 corpus must cover exactly the
+        indexed chunks, in the same order, or the lexical channel is scoring a
+        different corpus than the vector channel."""
+        chunk_ids, _ = self._load()
+        if chunk_ids != expected_chunk_ids:
+            raise RuntimeError(
+                f"BM25 chunk ids do not match the indexed chunks "
+                f"({len(chunk_ids)} persisted vs {len(expected_chunk_ids)} expected)"
+            )
+
     def query(self, text: str, top_n: int) -> list[tuple[str, float]]:
         """Returns (chunk_id, bm25_score) tuples, best match first."""
         chunk_ids, bm25 = self._load()

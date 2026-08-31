@@ -192,6 +192,29 @@ def test_promote_rename_failure_restores_live_collection_from_previous(tmp_path,
     assert _collection_names(_client(tmp_path)) == {COLLECTION_NAME}
 
 
+def test_validate_collection_passes_for_matching_profile_and_count(tmp_path):
+    _store(tmp_path, RecordingEmbedder(), profile="contextual-v1").build_collection(FIXTURE_CHUNKS)
+    _store(tmp_path, RecordingEmbedder(), profile="contextual-v1").validate_collection(
+        expected_profile="contextual-v1", expected_count=len(FIXTURE_CHUNKS)
+    )
+
+
+def test_validate_collection_rejects_profile_mismatch(tmp_path):
+    _store(tmp_path, RecordingEmbedder(), profile="raw-v1").build_collection(FIXTURE_CHUNKS)
+    with pytest.raises(RuntimeError, match="index_profile"):
+        _store(tmp_path, RecordingEmbedder(), profile="contextual-v1").validate_collection(
+            expected_profile="contextual-v1", expected_count=len(FIXTURE_CHUNKS)
+        )
+
+
+def test_validate_collection_rejects_count_mismatch(tmp_path):
+    _store(tmp_path, RecordingEmbedder(), profile="raw-v1").build_collection(FIXTURE_CHUNKS)
+    with pytest.raises(RuntimeError, match="rows"):
+        _store(tmp_path, RecordingEmbedder(), profile="raw-v1").validate_collection(
+            expected_profile="raw-v1", expected_count=99
+        )
+
+
 def test_successful_rebuild_swaps_cleanly_leaving_no_side_collections(tmp_path):
     store = _store(tmp_path, RecordingEmbedder())
     store.build_collection(FIXTURE_CHUNKS[:1])

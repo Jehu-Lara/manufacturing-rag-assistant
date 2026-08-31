@@ -70,6 +70,25 @@ def test_query_raises_file_not_found_with_helpful_message_when_never_built(tmp_p
         assert "index-build CLI" in str(exc)
 
 
+def test_validate_passes_when_chunk_ids_match(tmp_path):
+    persist_path = tmp_path / "bm25_index.json"
+    Bm25LexicalIndex(persist_path).build_index(
+        [_chunk("chunk-1", "alpha"), _chunk("chunk-2", "beta")]
+    )
+    Bm25LexicalIndex(persist_path).validate(["chunk-1", "chunk-2"])
+
+
+def test_validate_raises_when_chunk_ids_diverge(tmp_path):
+    persist_path = tmp_path / "bm25_index.json"
+    Bm25LexicalIndex(persist_path).build_index(
+        [_chunk("chunk-1", "alpha"), _chunk("chunk-2", "beta")]
+    )
+    import pytest
+
+    with pytest.raises(RuntimeError, match="BM25 chunk ids"):
+        Bm25LexicalIndex(persist_path).validate(["chunk-1", "chunk-9"])
+
+
 def test_no_pickle_import_in_module_source():
     import src.adapters.secondary.lexical.bm25_lexical_index as module
 

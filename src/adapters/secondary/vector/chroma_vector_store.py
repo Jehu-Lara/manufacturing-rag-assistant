@@ -124,6 +124,23 @@ class ChromaVectorStore:
     def _get_collection(self) -> Any:
         return self._client().get_collection(self._collection_name)
 
+    def validate_collection(self, *, expected_profile: IndexProfile, expected_count: int) -> None:
+        """Startup guard: the live collection must carry the expected
+        index_profile and row count, or the app is about to serve a stale or
+        wrong-profile index."""
+        collection = self._get_collection()
+        metadata = collection.metadata or {}
+        actual_profile = metadata.get("index_profile")
+        if actual_profile != expected_profile:
+            raise RuntimeError(
+                f"live collection index_profile is {actual_profile!r}, expected {expected_profile!r}"
+            )
+        actual_count = collection.count()
+        if actual_count != expected_count:
+            raise RuntimeError(
+                f"live collection has {actual_count} rows, expected {expected_count}"
+            )
+
     def query(self, text: str, top_n: int) -> list[tuple[str, float, dict[str, Any]]]:
         """Returns (chunk_id, cosine_similarity, metadata) tuples, best match first."""
         collection = self._get_collection()

@@ -3,17 +3,23 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, MODEL_REVISION
+from src.domain.models import IndexProfile
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 CHUNKS_FILE = REPO_ROOT / "ingestion" / "output" / "chunks.jsonl"
 CORPUS_DIR = REPO_ROOT / "corpus"
 MANIFEST_FILE = REPO_ROOT / "retrieval" / "output" / "index_manifest.json"
+
+_VALID_INDEX_PROFILES: tuple[IndexProfile, ...] = ("raw-v1", "contextual-v1")
+_DEFAULT_INDEX_PROFILE: IndexProfile = "contextual-v1"
+_SHA1_RE = re.compile(r"[0-9a-fA-F]{40}")
 
 _MANIFEST_FIELDS = (
     "index_profile",
@@ -50,12 +56,26 @@ def corpus_sha256(corpus_dir: Path = CORPUS_DIR) -> str:
     return digest.hexdigest()
 
 
+def resolve_index_profile() -> IndexProfile:
+    value = os.environ.get("INDEX_PROFILE", _DEFAULT_INDEX_PROFILE)
+    if value not in _VALID_INDEX_PROFILES:
+        raise ValueError(
+            f"INDEX_PROFILE must be one of {_VALID_INDEX_PROFILES}, got {value!r}"
+        )
+    return value
+
+
 def resolve_build_commit(explicit: str | None = None) -> str:
     if explicit:
         return explicit
     deployed_sha = os.environ.get("DEPLOYED_SHA")
     if deployed_sha:
         return deployed_sha
+    deployed_file = REPO_ROOT / "DEPLOYED_SHA"
+    if deployed_file.exists():
+        value = deployed_file.read_text(encoding="utf-8").strip()
+        if _SHA1_RE.fullmatch(value):
+            return value
     try:
         head = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL
@@ -117,23 +137,44 @@ def read(path: Path = MANIFEST_FILE) -> IndexManifest:
     return IndexManifest(**{field: data[field] for field in _MANIFEST_FIELDS})
 
 
+def _chunk_line_count(path: Path) -> int:
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+
 def verify(
     path: Path = MANIFEST_FILE,
     *,
+    expected_profile: IndexProfile | None = None,
     chunks_path: Path = CHUNKS_FILE,
     corpus_dir: Path = CORPUS_DIR,
-) -> None:
+) -> IndexManifest:
     manifest = read(path)
     actual_chunks = chunks_sha256(chunks_path)
     actual_corpus = corpus_sha256(corpus_dir)
+    actual_chunk_count = _chunk_line_count(chunks_path)
     mismatches: list[str] = []
     if manifest.chunks_sha256 != actual_chunks:
         mismatches.append(f"chunks_sha256 stored {manifest.chunks_sha256}, computed {actual_chunks}")
     if manifest.corpus_sha256 != actual_corpus:
         mismatches.append(f"corpus_sha256 stored {manifest.corpus_sha256}, computed {actual_corpus}")
+    if manifest.embedding_model != MODEL_NAME:
+        mismatches.append(f"embedding_model stored {manifest.embedding_model}, expected {MODEL_NAME}")
+    if manifest.embedding_revision != MODEL_REVISION:
+        mismatches.append(
+            f"embedding_revision stored {manifest.embedding_revision}, expected {MODEL_REVISION}"
+        )
+    if manifest.chunk_count != actual_chunk_count:
+        mismatches.append(
+            f"chunk_count stored {manifest.chunk_count}, computed {actual_chunk_count} from {chunks_path.name}"
+        )
+    if expected_profile is not None and manifest.index_profile != expected_profile:
+        mismatches.append(
+            f"index_profile stored {manifest.index_profile!r}, expected {expected_profile!r}"
+        )
     if mismatches:
         raise ValueError(
             f"{path} no longer matches the current inputs — "
             + "; ".join(mismatches)
             + ". Rebuild the index (`python -m src.features.retrieval.cli`)."
         )
+    return manifest

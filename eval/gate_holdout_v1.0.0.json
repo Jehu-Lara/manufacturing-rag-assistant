@@ -1,0 +1,7 @@
+{
+  "version": "1.0.0",
+  "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "status": "draft",
+  "_note": "Phase 3 gate holdout. Target composition: 48 questions = 12 answerable intents + 12 unanswerable intents, each paired EN/ES. Constraints (see Phase 3 plan sec. 7 / Task 8): NO paraphrases of eval_set v1.1.0 or regression_queries.json; every answerable question carries expected_chunk_ids + expected answer; every unanswerable question carries a verifiable note on why the corpus cannot answer it. This file must be authored and frozen by the project owner BEFORE any grounded_review candidate run. Freeze with `python -m src.features.evaluation.gate_holdout_integrity --write`.",
+  "questions": []
+}

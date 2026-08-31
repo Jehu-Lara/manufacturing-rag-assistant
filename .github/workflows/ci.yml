@@ -41,13 +41,19 @@ jobs:
       - name: Type-check (mypy)
         run: mypy src
 
-      - name: Verify eval set integrity
-        run: python -m src.features.evaluation.eval_set_integrity --verify
+      - name: Verify frozen evaluation datasets
+        run: |
+          python -m src.features.evaluation.eval_set_integrity --verify
+          python -m src.features.evaluation.regression_set_integrity --verify
+          python -m src.features.evaluation.gate_holdout_integrity --verify
 
       - name: Build real corpus artifacts (chunks + retrieval index)
         run: |
           python -m src.features.ingestion.cli
           python -m src.features.retrieval.cli
+
+      - name: Verify contextual refusal score bands
+        run: python -m src.features.evaluation.gate_score_guard
 
       - name: Run tests
         run: pytest -v

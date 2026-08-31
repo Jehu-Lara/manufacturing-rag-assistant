@@ -131,6 +131,52 @@ def test_resolve_build_commit_returns_unknown_without_git(monkeypatch: pytest.Mo
     assert index_manifest.resolve_build_commit() == "unknown"
 
 
+def test_resolve_build_commit_reads_deployed_sha_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.delenv("DEPLOYED_SHA", raising=False)
+    monkeypatch.setattr(index_manifest, "REPO_ROOT", tmp_path)
+    sha = "a1b2c3d4" * 5
+    (tmp_path / "DEPLOYED_SHA").write_text(sha + "\n", encoding="utf-8")
+    assert index_manifest.resolve_build_commit() == sha
+
+
+def test_resolve_build_commit_deployed_sha_env_beats_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setenv("DEPLOYED_SHA", "env-sha")
+    monkeypatch.setattr(index_manifest, "REPO_ROOT", tmp_path)
+    (tmp_path / "DEPLOYED_SHA").write_text("f" * 40 + "\n", encoding="utf-8")
+    assert index_manifest.resolve_build_commit() == "env-sha"
+
+
+def test_resolve_build_commit_ignores_malformed_deployed_sha_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.delenv("DEPLOYED_SHA", raising=False)
+    monkeypatch.setattr(index_manifest, "REPO_ROOT", tmp_path)
+    (tmp_path / "DEPLOYED_SHA").write_text("not-a-real-sha\n", encoding="utf-8")
+    # tmp_path is not a git repo, so the git fallback yields "unknown" — the
+    # point is only that the malformed file value is never returned.
+    assert index_manifest.resolve_build_commit() == "unknown"
+
+
+def test_resolve_index_profile_defaults_to_contextual_v1(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("INDEX_PROFILE", raising=False)
+    assert index_manifest.resolve_index_profile() == "contextual-v1"
+
+
+def test_resolve_index_profile_reads_env(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("INDEX_PROFILE", "raw-v1")
+    assert index_manifest.resolve_index_profile() == "raw-v1"
+
+
+def test_resolve_index_profile_rejects_unknown(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("INDEX_PROFILE", "bogus-v9")
+    with pytest.raises(ValueError, match="INDEX_PROFILE"):
+        index_manifest.resolve_index_profile()
+
+
 def _manifest() -> index_manifest.IndexManifest:
     return index_manifest.IndexManifest(
         index_profile="raw-v1",
@@ -225,4 +271,77 @@ def test_manifest_verify_raises_on_hash_mismatch(tmp_path: Path):
     )
     index_manifest.write(manifest, path)
     with pytest.raises(ValueError):
+        index_manifest.verify(path, chunks_path=chunks_file, corpus_dir=tmp_path)
+
+
+def _coherent_manifest_on_disk(
+    tmp_path: Path, *, index_profile: str = "raw-v1", chunk_count: int = 2
+) -> tuple[Path, Path]:
+    _write_mini_corpus(tmp_path)
+    chunks_file = tmp_path / "chunks.jsonl"
+    chunks_file.write_text(
+        "".join(f'{{"chunk_id": "c{i}"}}\n' for i in range(chunk_count)), encoding="utf-8"
+    )
+    path = tmp_path / "index_manifest.json"
+    index_manifest.write(
+        index_manifest.IndexManifest(
+            index_profile=index_profile,
+            chunks_sha256=index_manifest.chunks_sha256(chunks_file),
+            corpus_sha256=index_manifest.corpus_sha256(tmp_path),
+            embedding_model=MODEL_NAME,
+            embedding_revision=MODEL_REVISION,
+            build_commit="deadbeef",
+            chunk_count=chunk_count,
+        ),
+        path,
+    )
+    return path, chunks_file
+
+
+def test_manifest_verify_returns_the_manifest(tmp_path: Path):
+    path, chunks_file = _coherent_manifest_on_disk(tmp_path)
+    manifest = index_manifest.verify(path, chunks_path=chunks_file, corpus_dir=tmp_path)
+    assert isinstance(manifest, index_manifest.IndexManifest)
+    assert manifest.index_profile == "raw-v1"
+
+
+def test_manifest_verify_rejects_profile_mismatch(tmp_path: Path):
+    path, chunks_file = _coherent_manifest_on_disk(tmp_path, index_profile="contextual-v1")
+    with pytest.raises(ValueError, match="index_profile"):
+        index_manifest.verify(
+            path, expected_profile="raw-v1", chunks_path=chunks_file, corpus_dir=tmp_path
+        )
+
+
+def test_manifest_verify_accepts_matching_expected_profile(tmp_path: Path):
+    path, chunks_file = _coherent_manifest_on_disk(tmp_path, index_profile="contextual-v1")
+    index_manifest.verify(
+        path, expected_profile="contextual-v1", chunks_path=chunks_file, corpus_dir=tmp_path
+    )
+
+
+def test_manifest_verify_rejects_embedding_model_mismatch(tmp_path: Path):
+    path, chunks_file = _coherent_manifest_on_disk(tmp_path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["embedding_model"] = "some/other-model"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="embedding_model"):
+        index_manifest.verify(path, chunks_path=chunks_file, corpus_dir=tmp_path)
+
+
+def test_manifest_verify_rejects_embedding_revision_mismatch(tmp_path: Path):
+    path, chunks_file = _coherent_manifest_on_disk(tmp_path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["embedding_revision"] = "0" * 40
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="embedding_revision"):
+        index_manifest.verify(path, chunks_path=chunks_file, corpus_dir=tmp_path)
+
+
+def test_manifest_verify_rejects_chunk_count_mismatch(tmp_path: Path):
+    path, chunks_file = _coherent_manifest_on_disk(tmp_path, chunk_count=2)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["chunk_count"] = 99
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match="chunk_count"):
         index_manifest.verify(path, chunks_path=chunks_file, corpus_dir=tmp_path)
