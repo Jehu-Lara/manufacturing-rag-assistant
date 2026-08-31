@@ -5,19 +5,32 @@ from typing import Any, cast
 
 import chromadb
 
-from src.domain.models import ChunkMetadata
+from src.domain.models import ChunkMetadata, IndexProfile
 from src.domain.ports import EmbedderPort
 
 COLLECTION_NAME = "manufacturing_chunks"
 
 
+def contextual_embedding_input(chunk: ChunkMetadata) -> str:
+    """The one place the contextual-v1 heading prefix is written (ASCII `>`)."""
+    return f"{chunk.document_title} > {chunk.section_heading}\n\n{chunk.chunk_text}"
+
+
 class ChromaVectorStore:
     """Implements VectorStorePort."""
 
-    def __init__(self, persist_dir: Path, embedder: EmbedderPort, collection_name: str = COLLECTION_NAME) -> None:
+    def __init__(
+        self,
+        persist_dir: Path,
+        embedder: EmbedderPort,
+        collection_name: str = COLLECTION_NAME,
+        *,
+        index_profile: IndexProfile = "raw-v1",
+    ) -> None:
         self._persist_dir = persist_dir
         self._embedder = embedder
         self._collection_name = collection_name
+        self._index_profile: IndexProfile = index_profile
 
     def _client(self) -> Any:
         # chromadb ships a py.typed marker but mypy can't statically resolve
@@ -39,22 +52,74 @@ class ChromaVectorStore:
 
     def build_collection(self, chunks: list[ChunkMetadata]) -> None:
         client = self._client()
+
+        if self._index_profile == "contextual-v1":
+            embedding_inputs = [contextual_embedding_input(chunk) for chunk in chunks]
+        else:
+            embedding_inputs = [chunk.chunk_text for chunk in chunks]
+
+        # Validate + embed BEFORE any collection is created/deleted/renamed, so
+        # a length or model failure leaves the live collection untouched.
+        self._embedder.assert_fits_max_seq_length(embedding_inputs)
+        embeddings = self._embedder.embed_texts(embedding_inputs)
+
+        candidate_name = f"{self._collection_name}__candidate"
+        previous_name = f"{self._collection_name}__previous"
+
         try:
-            client.delete_collection(self._collection_name)
-        except Exception:
+            client.delete_collection(candidate_name)
+        except chromadb.errors.NotFoundError:
             pass
-        collection = client.create_collection(self._collection_name, metadata={"hnsw:space": "cosine"})
 
-        ids = [chunk.chunk_id for chunk in chunks]
-        documents = [chunk.chunk_text for chunk in chunks]
-        embeddings = self._embedder.embed_texts(documents)
-        metadatas = [self._to_chroma_metadata(chunk) for chunk in chunks]
+        candidate = client.create_collection(
+            candidate_name,
+            metadata={"hnsw:space": "cosine", "index_profile": self._index_profile},
+        )
+        # documents and metadatas are the RAW chunk text for both profiles — only
+        # the embedding vectors differ. chromadb's stub wants numpy-array
+        # embeddings and a narrower metadata value union than plain
+        # list[list[float]]/list[dict]; both are runtime-valid inputs.
+        candidate.add(
+            ids=[chunk.chunk_id for chunk in chunks],
+            embeddings=embeddings,
+            documents=[chunk.chunk_text for chunk in chunks],
+            metadatas=[self._to_chroma_metadata(chunk) for chunk in chunks],
+        )
+        if candidate.count() != len(chunks):
+            raise RuntimeError(
+                f"candidate collection has {candidate.count()} rows, expected {len(chunks)}"
+            )
 
-        # chromadb's stub wants numpy-array embeddings and a narrower metadata
-        # value union than plain list[list[float]]/list[dict] give it; both
-        # are runtime-valid inputs chromadb accepts directly, just not what
-        # the stub states.
-        collection.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+        self._promote(client, candidate, previous_name)
+
+    def _promote(self, client: Any, candidate: Any, previous_name: str) -> None:
+        try:
+            client.delete_collection(previous_name)
+        except chromadb.errors.NotFoundError:
+            pass
+
+        try:
+            live = client.get_collection(self._collection_name)
+        except chromadb.errors.NotFoundError:
+            live = None
+
+        if live is not None:
+            live.modify(name=previous_name)
+
+        try:
+            candidate.modify(name=self._collection_name)
+        except Exception:
+            if live is not None:
+                client.get_collection(previous_name).modify(name=self._collection_name)
+            raise
+
+        client.get_collection(self._collection_name)
+
+        if live is not None:
+            try:
+                client.delete_collection(previous_name)
+            except chromadb.errors.NotFoundError:
+                pass
 
     def _get_collection(self) -> Any:
         return self._client().get_collection(self._collection_name)

@@ -97,9 +97,11 @@ def build_manifest(
 
 def write(manifest: IndexManifest, path: Path = MANIFEST_FILE) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as f:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8", newline="\n") as f:
         json.dump(asdict(manifest), f, indent=2, sort_keys=True)
         f.write("\n")
+    tmp.replace(path)
 
 
 def read(path: Path = MANIFEST_FILE) -> IndexManifest:
