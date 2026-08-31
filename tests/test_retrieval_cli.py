@@ -106,13 +106,23 @@ def _patch_cli(monkeypatch, tmp_path):
     return written
 
 
-def test_run_defaults_index_profile_to_raw_v1(monkeypatch, tmp_path):
+def test_run_defaults_index_profile_to_contextual_v1(monkeypatch, tmp_path):
     _patch_cli(monkeypatch, tmp_path)
     monkeypatch.delenv("INDEX_PROFILE", raising=False)
 
     cli_module.run()
 
+    assert _SpyVectorStore.instances[-1].kwargs.get("index_profile") == "contextual-v1"
+
+
+def test_run_reads_index_profile_env_for_raw_v1_rollback(monkeypatch, tmp_path):
+    written = _patch_cli(monkeypatch, tmp_path)
+    monkeypatch.setenv("INDEX_PROFILE", "raw-v1")
+
+    cli_module.run()
+
     assert _SpyVectorStore.instances[-1].kwargs.get("index_profile") == "raw-v1"
+    assert written[-1].index_profile == "raw-v1"
 
 
 def test_run_reads_index_profile_env_for_contextual_v1(monkeypatch, tmp_path):
@@ -140,5 +150,5 @@ def test_run_emits_index_manifest_via_build_and_write(monkeypatch, tmp_path):
     cli_module.run()
 
     assert len(written) == 1
-    assert written[0].index_profile == "raw-v1"
+    assert written[0].index_profile == "contextual-v1"
     assert written[0].chunk_count == len(_CLI_FIXTURE_CHUNKS)

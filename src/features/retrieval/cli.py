@@ -27,7 +27,7 @@ def load_chunks(path: Path = CHUNKS_FILE) -> list[ChunkMetadata]:
 
 
 def run() -> None:
-    profile = os.environ.get("INDEX_PROFILE", "raw-v1")
+    profile = os.environ.get("INDEX_PROFILE", "contextual-v1")
     if profile not in _VALID_PROFILES:
         raise ValueError(f"INDEX_PROFILE must be one of {_VALID_PROFILES}, got {profile!r}")
 
