@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Optional, cast
+from dataclasses import dataclass
+from typing import Any, Callable, Optional, cast
 
 import groq
 import openai
@@ -14,6 +15,33 @@ from src.core.errors import GenerationError
 from src.core.telemetry import get_tracer
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LlmTraceEvent:
+    """Immutable, content-free record of one physical step of a generation
+    call. Carries provider/model, token counts, finish reason and error
+    shape — never the prompt, the question, the answer, an API key, or a raw
+    exception string. Consumed by an injected `trace_hook` (the Phase 3C
+    generation runner); production passes no hook."""
+
+    event: str
+    provider: str
+    phase: str
+    model: Optional[str] = None
+    attempt: Optional[int] = None
+    wait_seconds: Optional[float] = None
+    finish_reason: Optional[str] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    system_fingerprint: Optional[str] = None
+    schema_mode: Optional[str] = None
+    error_type: Optional[str] = None
+    status_code: Optional[int] = None
+
+
+TraceHook = Callable[[LlmTraceEvent], None]
 
 # Groq free-tier chat model with tool/JSON-schema support. The original pick
 # (llama-3.3-70b-versatile) was retired by Groq and started 404ing on every
@@ -64,6 +92,36 @@ def _provider_error_fields(provider: str, exc: Exception) -> dict[str, object]:
     if isinstance(status_code, int):
         fields["status_code"] = status_code
     return fields
+
+
+def _provider_error_trace_fields(exc: Exception) -> dict[str, Any]:
+    """Only the exception TYPE and HTTP status — never str(exc), which can
+    echo prompt fragments or a key back from a provider error body."""
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None) if response is not None else None
+    fields: dict[str, Any] = {"error_type": type(exc).__name__}
+    if isinstance(status_code, int):
+        fields["status_code"] = status_code
+    return fields
+
+
+def _usage_trace_fields(response: Any, model: str, schema_mode: str) -> dict[str, Any]:
+    usage = getattr(response, "usage", None)
+    choices = getattr(response, "choices", None) or []
+    finish_reason = getattr(choices[0], "finish_reason", None) if choices else None
+    return {
+        "model": model,
+        "schema_mode": schema_mode,
+        "finish_reason": finish_reason if isinstance(finish_reason, str) else None,
+        "prompt_tokens": getattr(usage, "prompt_tokens", None),
+        "completion_tokens": getattr(usage, "completion_tokens", None),
+        "total_tokens": getattr(usage, "total_tokens", None),
+        "system_fingerprint": (
+            getattr(response, "system_fingerprint", None)
+            if isinstance(getattr(response, "system_fingerprint", None), str)
+            else None
+        ),
+    }
 
 
 def _extract_retry_after_seconds(exc: Exception) -> Optional[float]:
@@ -163,6 +221,20 @@ class GroqOpenAiLlmClient:
     original sync api.llm_client, whose time.sleep would have stalled every
     other in-flight request under a single-process/single-worker deploy."""
 
+    def __init__(
+        self, *, allow_provider_fallback: bool = True, trace_hook: Optional[TraceHook] = None
+    ) -> None:
+        """Defaults reproduce production exactly: fallback ON, no trace hook.
+        The Phase 3C generation runner sets `allow_provider_fallback=False`
+        (so a rate-limit fallback can't confound a causal comparison) and a
+        `trace_hook` for physical-call accounting."""
+        self._allow_provider_fallback = allow_provider_fallback
+        self._trace_hook = trace_hook
+
+    def _emit(self, event: LlmTraceEvent) -> None:
+        if self._trace_hook is not None:
+            self._trace_hook(event)
+
     async def generate_structured(
         self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
     ) -> dict[str, Any]:
@@ -174,9 +246,10 @@ class GroqOpenAiLlmClient:
     ) -> dict[str, Any]:
         primary = settings.llm_provider
         fallback = _other_provider(primary)
+        providers = (primary, fallback) if self._allow_provider_fallback else (primary,)
         attempts_summary: list[str] = []
 
-        for provider in (primary, fallback):
+        for provider in providers:
             api_key = _api_key_for(provider, settings)
             if api_key is None:
                 logger.warning(
@@ -191,11 +264,21 @@ class GroqOpenAiLlmClient:
             )
 
             try:
-                raw_text = await self._get_provider_response(provider, system_prompt, user_prompt, schema, api_key)
+                raw_text = await self._get_provider_response(
+                    provider, system_prompt, user_prompt, schema, api_key, phase="initial"
+                )
             except Exception as exc:
                 logger.error(
                     "provider call failed, moving to next provider",
                     extra=_provider_error_fields(provider, exc),
+                )
+                self._emit(
+                    LlmTraceEvent(
+                        event="provider_call_failed",
+                        provider=provider,
+                        phase="initial",
+                        **_provider_error_trace_fields(exc),
+                    )
                 )
                 attempts_summary.append(f"{provider}: call failed ({type(exc).__name__})")
                 continue
@@ -210,16 +293,32 @@ class GroqOpenAiLlmClient:
                 "invalid structured response, attempting repair retry",
                 extra={"provider": provider, "error": str(error)},
             )
+            self._emit(
+                LlmTraceEvent(
+                    event="repair_triggered",
+                    provider=provider,
+                    phase="initial",
+                    error_type=type(error).__name__,
+                )
+            )
             repair_system_prompt = _build_repair_system_prompt(system_prompt, raw_text, error)
 
             try:
                 repaired_raw = await self._get_provider_response(
-                    provider, repair_system_prompt, user_prompt, schema, api_key
+                    provider, repair_system_prompt, user_prompt, schema, api_key, phase="repair"
                 )
             except Exception as exc:
                 logger.error(
                     "repair retry call failed, moving to next provider",
                     extra=_provider_error_fields(provider, exc),
+                )
+                self._emit(
+                    LlmTraceEvent(
+                        event="provider_call_failed",
+                        provider=provider,
+                        phase="repair",
+                        **_provider_error_trace_fields(exc),
+                    )
                 )
                 attempts_summary.append(f"{provider}: repair call failed ({type(exc).__name__})")
                 continue
@@ -239,12 +338,22 @@ class GroqOpenAiLlmClient:
             attempts_summary.append(f"{provider}: repair validation failed ({repair_error})")
 
         logger.error("structured generation failed on all providers", extra={"attempts": attempts_summary})
+        self._emit(
+            LlmTraceEvent(event="generation_exhausted", provider=providers[-1], phase="terminal")
+        )
         raise GenerationError(
             "Structured generation failed on both providers after retries: " + "; ".join(attempts_summary)
         )
 
     async def _get_provider_response(
-        self, provider: str, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str]
+        self,
+        provider: str,
+        system_prompt: str,
+        user_prompt: str,
+        schema: dict[str, Any],
+        api_key: Optional[str],
+        *,
+        phase: str,
     ) -> str:
         """One logical call to `provider`, with rate-limit backoff handled
         here — a separate path from JSON-repair retries, which live in
@@ -255,12 +364,23 @@ class GroqOpenAiLlmClient:
         last_exc: Optional[Exception] = None
         for attempt_index in range(len(RATE_LIMIT_BACKOFF_SECONDS) + 1):
             try:
-                return await self._call_provider(provider, system_prompt, user_prompt, schema, api_key)
+                return await self._call_provider(
+                    provider, system_prompt, user_prompt, schema, api_key, phase=phase
+                )
             except _RATE_LIMIT_ERROR_TYPES as exc:
                 last_exc = exc
                 if attempt_index >= len(RATE_LIMIT_BACKOFF_SECONDS):
                     logger.warning(
                         "rate limit backoff exhausted", extra={"provider": provider, "attempts": attempt_index}
+                    )
+                    self._emit(
+                        LlmTraceEvent(
+                            event="rate_limit_exhausted",
+                            provider=provider,
+                            phase=phase,
+                            attempt=attempt_index,
+                            **_provider_error_trace_fields(exc),
+                        )
                     )
                     raise
                 wait_seconds = _extract_retry_after_seconds(exc)
@@ -270,22 +390,40 @@ class GroqOpenAiLlmClient:
                     "rate limited, backing off before retrying same provider",
                     extra={"provider": provider, "wait_seconds": wait_seconds, "attempt": attempt_index + 1},
                 )
+                self._emit(
+                    LlmTraceEvent(
+                        event="rate_limited",
+                        provider=provider,
+                        phase=phase,
+                        attempt=attempt_index + 1,
+                        wait_seconds=wait_seconds,
+                        **_provider_error_trace_fields(exc),
+                    )
+                )
                 await asyncio.sleep(wait_seconds)
         assert last_exc is not None  # pragma: no cover - loop always returns or raises above
         raise last_exc
 
     async def _call_provider(
-        self, provider: str, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str]
+        self,
+        provider: str,
+        system_prompt: str,
+        user_prompt: str,
+        schema: dict[str, Any],
+        api_key: Optional[str],
+        *,
+        phase: str,
     ) -> str:
         if provider == "groq":
-            return await self._call_groq(system_prompt, user_prompt, schema, api_key)
-        return await self._call_openai(system_prompt, user_prompt, schema, api_key)
+            return await self._call_groq(system_prompt, user_prompt, schema, api_key, phase=phase)
+        return await self._call_openai(system_prompt, user_prompt, schema, api_key, phase=phase)
 
     async def _call_groq(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str]
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str], *, phase: str
     ) -> str:
         client = groq.AsyncGroq(api_key=api_key, max_retries=0)
         messages = _messages(system_prompt, user_prompt)
+        schema_mode = "json_schema"
         try:
             # messages/response_format are built dynamically from `schema` (a
             # plain JSON Schema dict, not known statically), so they can't
@@ -307,16 +445,29 @@ class GroqOpenAiLlmClient:
                 "groq json_schema response_format unsupported for this model, retrying with json_object mode",
                 extra={"provider": "groq", "model": GROQ_MODEL},
             )
+            schema_mode = "json_object"
+            self._emit(
+                LlmTraceEvent(
+                    event="schema_fallback", provider="groq", phase=phase, model=GROQ_MODEL,
+                    schema_mode=schema_mode,
+                )
+            )
             response = await client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=MAX_COMPLETION_TOKENS,
             )  # type: ignore[call-overload]
+        self._emit(
+            LlmTraceEvent(
+                event="physical_request", provider="groq", phase=phase,
+                **_usage_trace_fields(response, GROQ_MODEL, schema_mode),
+            )
+        )
         return cast(str, response.choices[0].message.content)
 
     async def _call_openai(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str]
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str], *, phase: str
     ) -> str:
         client = openai.AsyncOpenAI(api_key=api_key, max_retries=0)
         # Same dynamic-schema reasoning as _call_groq above.
@@ -329,4 +480,10 @@ class GroqOpenAiLlmClient:
             },
             max_completion_tokens=MAX_COMPLETION_TOKENS,
         )  # type: ignore[call-overload]
+        self._emit(
+            LlmTraceEvent(
+                event="physical_request", provider="openai", phase=phase,
+                **_usage_trace_fields(response, OPENAI_MODEL, "json_schema"),
+            )
+        )
         return cast(str, response.choices[0].message.content)
