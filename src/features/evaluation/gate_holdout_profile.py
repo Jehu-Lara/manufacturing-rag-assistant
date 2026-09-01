@@ -137,10 +137,11 @@ def run(
     report = render_report(status, cells)
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / "gate_holdout_band_profile.md"
-    report_path.write_text(report, encoding="utf-8")
+    report_path.write_text(report, encoding="utf-8", newline="\n")
     (report_dir / "gate_holdout_band_profile.json").write_text(
         json.dumps({"status": status, "cells": [asdict(c) for c in cells]}, indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     print(report)
     print(f"Report written to: {report_path}")
