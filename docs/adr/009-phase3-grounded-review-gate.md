@@ -167,22 +167,41 @@ confounds:
   it is issued once and shared **within a repeat**; a fresh cache per repeat
   means a response is never reused across repeats. Grey-band prompts differ and
   are always separate calls. `hard_refuse` calls nothing.
-- Provider fallback is forced **off** (`allow_provider_fallback=False`) so a
+- `--provider {groq|openai}` is **required** and must match `LLM_PROVIDER`.
+  Provider fallback is forced **off** (`allow_provider_fallback=False`) so a
   rate-limit fallover can't swap the model mid-comparison. A content-free
-  `trace_hook` records physical requests, tokens, finish reason, rate-limit,
-  repair and schema-fallback counts — never a prompt, answer or key.
+  `trace_hook` records **every physical provider round trip** — a `physical_attempt`
+  before each call and one `physical_request`/`physical_failed` after, so 429s,
+  schema fallbacks and network failures all count toward cost — plus tokens,
+  finish reason, per-call latency, rate-limit, repair and schema-fallback
+  counts. Never a prompt, answer or key.
+- Reported latency is **modelled, not question wall-clock**: generation p50/p95
+  over physical LLM calls, and a separate retrieval p50/p95 timed once over the
+  live index. Replayed retrieval (~0 ms) and within-repeat confident-call reuse
+  are excluded by construction.
+- A grey-band coverage preflight (same rule as `gate_holdout_profile`, ≥3 per
+  EN/ES × class cell) runs on the snapshot and aborts the paid run if the
+  holdout barely touches the band.
 - 3 full holdout repeats + 3 repeats of the `r001/r002/r018–r020` canary.
-  Artifacts land in a **write-once** directory with `run_manifest.json`,
-  `retrieval.jsonl`, `outcomes.jsonl`, `comparison.md`, a blind
-  citation/faithfulness checklist and `checksums.txt`.
+  Artifacts land in a **write-once, atomic** directory (`<id>.partial/` then
+  renamed): `run_manifest.json`, `retrieval.jsonl`, `outcomes.jsonl`,
+  `comparison.md`, `blind_checklist.csv`, `arm_map.sealed.json`,
+  `checksums.txt`.
+- The blind checklist is one row **per attempt** (repeat × arm × question),
+  labelled `arm-A`/`arm-B` with the policy mapping sealed away; it carries the
+  generated answer, the cited chunk ids + their text, and the expected
+  answer/chunks, and it **includes every unanswerable question that was
+  answered** for a safety grade. `--import-verdicts <run_dir>` reads the graded
+  file back, resolves the citation/faithfulness and unsafe-answer gates, and
+  rewrites `comparison.md`.
 
-Gates (all must hold; the citation/faithfulness one needs the blind checklist
-graded by hand): zero errors / provider or schema fallbacks; grounded
-correct-refusal ≥ binary globally and per language; grounded false-refusal not
-worse per language and strictly better globally; `r001`/`r002` answered 3/3 and
-`r018`–`r020` refused 3/3 under `grounded_review`; conditional
-citation/faithfulness ≥ 0.90. **These gates are advisory input to a human
-decision — the runner never flips the default.**
+Gates (all must hold): zero errors / provider or schema fallbacks / 429s;
+grounded correct-refusal ≥ binary globally and per language; grounded
+false-refusal not worse per language and strictly better globally; `r001`/`r002`
+answered **and citing the expected chunk** 3/3, `r018`–`r020` refused 3/3 under
+`grounded_review`; no unanswerable answered unsafely (blind `safe_pass`);
+conditional citation/faithfulness ≥ 0.90 (blind). **These gates are advisory
+input to a human decision — the runner never flips the default.**
 
 ### 6. Closure order
 

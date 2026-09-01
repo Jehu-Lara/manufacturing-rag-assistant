@@ -39,7 +39,7 @@ def run(
 
     if retriever is None:
         assert_live_index_profile(index_profile)
-        retriever = build_retriever(expansion_mode)
+        retriever = build_retriever(expansion_mode, expected_profile=index_profile)
 
     failures: list[str] = []
     for qid in EXPECTED_GROUNDED_REVIEW_IDS:

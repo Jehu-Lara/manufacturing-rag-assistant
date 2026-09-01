@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, cast
+from typing import Any, Awaitable, Callable, Optional, cast
 
 import groq
 import openai
@@ -31,6 +32,7 @@ class LlmTraceEvent:
     model: Optional[str] = None
     attempt: Optional[int] = None
     wait_seconds: Optional[float] = None
+    latency_ms: Optional[float] = None
     finish_reason: Optional[str] = None
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
@@ -235,6 +237,51 @@ class GroqOpenAiLlmClient:
         if self._trace_hook is not None:
             self._trace_hook(event)
 
+    async def _invoke(
+        self,
+        provider: str,
+        phase: str,
+        model: str,
+        schema_mode: str,
+        create: Awaitable[Any],
+    ) -> Any:
+        """One physical provider round trip. Emits `physical_attempt` before the
+        call, then exactly one of `physical_request` (success, with usage +
+        latency) or `physical_failed` (any exception, with latency + error
+        shape) — a 429, a schema-unsupported 400, and a network drop are all
+        real physical calls and are all counted."""
+        self._emit(
+            LlmTraceEvent(
+                event="physical_attempt", provider=provider, phase=phase, model=model, schema_mode=schema_mode
+            )
+        )
+        start = time.monotonic()
+        try:
+            response = await create
+        except Exception as exc:
+            self._emit(
+                LlmTraceEvent(
+                    event="physical_failed",
+                    provider=provider,
+                    phase=phase,
+                    model=model,
+                    schema_mode=schema_mode,
+                    latency_ms=(time.monotonic() - start) * 1000,
+                    **_provider_error_trace_fields(exc),
+                )
+            )
+            raise
+        self._emit(
+            LlmTraceEvent(
+                event="physical_request",
+                provider=provider,
+                phase=phase,
+                latency_ms=(time.monotonic() - start) * 1000,
+                **_usage_trace_fields(response, model, schema_mode),
+            )
+        )
+        return response
+
     async def generate_structured(
         self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
     ) -> dict[str, Any]:
@@ -423,21 +470,26 @@ class GroqOpenAiLlmClient:
     ) -> str:
         client = groq.AsyncGroq(api_key=api_key, max_retries=0)
         messages = _messages(system_prompt, user_prompt)
-        schema_mode = "json_schema"
         try:
             # messages/response_format are built dynamically from `schema` (a
             # plain JSON Schema dict, not known statically), so they can't
             # match the SDK's precise per-role TypedDict overloads — the
             # runtime shape is correct even though the static type isn't.
-            response = await client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=messages,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
-                },
-                max_completion_tokens=MAX_COMPLETION_TOKENS,
-            )  # type: ignore[call-overload]
+            response = await self._invoke(
+                "groq",
+                phase,
+                GROQ_MODEL,
+                "json_schema",
+                client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=messages,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
+                    },
+                    max_completion_tokens=MAX_COMPLETION_TOKENS,
+                ),  # type: ignore[call-overload]
+            )
         except _JSON_SCHEMA_RETRY_ERROR_TYPES as exc:
             if not _is_unsupported_response_format_error(exc):
                 raise
@@ -445,25 +497,24 @@ class GroqOpenAiLlmClient:
                 "groq json_schema response_format unsupported for this model, retrying with json_object mode",
                 extra={"provider": "groq", "model": GROQ_MODEL},
             )
-            schema_mode = "json_object"
             self._emit(
                 LlmTraceEvent(
                     event="schema_fallback", provider="groq", phase=phase, model=GROQ_MODEL,
-                    schema_mode=schema_mode,
+                    schema_mode="json_object",
                 )
             )
-            response = await client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=messages,
-                response_format={"type": "json_object"},
-                max_completion_tokens=MAX_COMPLETION_TOKENS,
-            )  # type: ignore[call-overload]
-        self._emit(
-            LlmTraceEvent(
-                event="physical_request", provider="groq", phase=phase,
-                **_usage_trace_fields(response, GROQ_MODEL, schema_mode),
+            response = await self._invoke(
+                "groq",
+                phase,
+                GROQ_MODEL,
+                "json_object",
+                client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    max_completion_tokens=MAX_COMPLETION_TOKENS,
+                ),  # type: ignore[call-overload]
             )
-        )
         return cast(str, response.choices[0].message.content)
 
     async def _call_openai(
@@ -471,19 +522,19 @@ class GroqOpenAiLlmClient:
     ) -> str:
         client = openai.AsyncOpenAI(api_key=api_key, max_retries=0)
         # Same dynamic-schema reasoning as _call_groq above.
-        response = await client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=_messages(system_prompt, user_prompt),
-            response_format={
-                "type": "json_schema",
-                "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
-            },
-            max_completion_tokens=MAX_COMPLETION_TOKENS,
-        )  # type: ignore[call-overload]
-        self._emit(
-            LlmTraceEvent(
-                event="physical_request", provider="openai", phase=phase,
-                **_usage_trace_fields(response, OPENAI_MODEL, "json_schema"),
-            )
+        response = await self._invoke(
+            "openai",
+            phase,
+            OPENAI_MODEL,
+            "json_schema",
+            client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=_messages(system_prompt, user_prompt),
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
+                },
+                max_completion_tokens=MAX_COMPLETION_TOKENS,
+            ),  # type: ignore[call-overload]
         )
         return cast(str, response.choices[0].message.content)

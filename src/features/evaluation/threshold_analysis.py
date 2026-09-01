@@ -256,7 +256,7 @@ def run(
     questions = data["questions"]
 
     assert_live_index_profile(index_profile)
-    retriever = build_retriever(expansion_mode)
+    retriever = build_retriever(expansion_mode, expected_profile=index_profile)
     answerable = [q for q in questions if q["answerable"]]
     unanswerable = [q for q in questions if not q["answerable"]]
 

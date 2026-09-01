@@ -47,9 +47,10 @@ CSV_COLUMNS = [
 
 def _build_use_case_and_retriever(
     expansion_mode: ExpansionMode = "off",
+    index_profile: IndexProfile = "raw-v1",
 ) -> tuple[QueryUseCase, HybridRetriever]:
     settings = load_settings()
-    retriever = build_retriever(expansion_mode)
+    retriever = build_retriever(expansion_mode, expected_profile=index_profile)
     llm_client = GroqOpenAiLlmClient()
     return QueryUseCase(retriever, llm_client, settings), retriever
 
@@ -80,6 +81,12 @@ def _p90(latencies_ms: list[float]) -> float:
     return ordered[index]
 
 
+def _error_type(error: Exception) -> str:
+    """Only the exception TYPE — never str(error), which can echo a prompt
+    fragment, the question, or a provider error body back into an artifact."""
+    return type(error).__name__
+
+
 def _error_row(question: dict[str, Any], latency_ms: float, error: Exception) -> dict[str, Any]:
     """A single failing question (e.g. a transient network error) must not abort the
     whole ~13-minute, 40-question sequential run and discard every row already
@@ -102,7 +109,7 @@ def _error_row(question: dict[str, Any], latency_ms: float, error: Exception) ->
         "answer": "",
         "citations": [],
         "latency_ms": latency_ms,
-        "error": str(error),
+        "error": _error_type(error),
     }
 
 
@@ -141,7 +148,7 @@ def _build_row(use_case: QueryUseCase, retriever: HybridRetriever, question: dic
     except Exception as exc:
         latency_ms = (time.monotonic() - start_time) * 1000
         print(
-            f"WARNING: question {question['id']!r} failed with {type(exc).__name__}: {exc}; "
+            f"WARNING: question {question['id']!r} failed with {type(exc).__name__}; "
             "recording an error row and continuing with the rest of the run",
             file=sys.stderr,
         )
@@ -251,7 +258,7 @@ def run(
 
     if use_case is None or retriever is None:
         assert_live_index_profile(index_profile)
-        use_case, retriever = _build_use_case_and_retriever(expansion_mode)
+        use_case, retriever = _build_use_case_and_retriever(expansion_mode, index_profile)
     rows: list[dict[str, Any]] = []
     for question in questions:
         rows.append(_build_row(use_case, retriever, question))

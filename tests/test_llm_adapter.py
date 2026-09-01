@@ -326,3 +326,50 @@ def test_trace_hook_records_rate_limit_and_repair_events(mock_groq_cls, mock_ope
     assert "rate_limited" in names
     assert "repair_triggered" in names
     assert [e for e in events if e.event == "physical_request" and e.phase == "repair"]
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.asyncio.sleep", new_callable=AsyncMock)
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_trace_hook_counts_failed_physical_attempts(mock_groq_cls, mock_openai_cls, mock_sleep):
+    # every groq attempt 429s (4 physical attempts, all failed), then openai succeeds
+    mock_groq_cls.return_value = _async_client_with_create(
+        _groq_rate_limit_error(), _groq_rate_limit_error(), _groq_rate_limit_error(), _groq_rate_limit_error(),
+        side_effect=True,
+    )
+    mock_openai_cls.return_value = _async_client_with_create(_response_with_usage(VALID_JSON_TEXT))
+    events = []
+
+    _run(
+        GroqOpenAiLlmClient(trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA, _settings("groq")
+        )
+    )
+
+    attempts = [e for e in events if e.event == "physical_attempt"]
+    failed = [e for e in events if e.event == "physical_failed"]
+    succeeded = [e for e in events if e.event == "physical_request"]
+    assert len(attempts) == 5  # 4 groq + 1 openai
+    assert len(failed) == 4 and all(e.provider == "groq" for e in failed)
+    assert len(succeeded) == 1 and succeeded[0].provider == "openai"
+    assert all(e.latency_ms is not None for e in failed + succeeded)
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_trace_hook_counts_schema_fallback_as_two_attempts(mock_groq_cls, mock_openai_cls):
+    mock_groq_cls.return_value = _async_client_with_create(
+        _groq_unsupported_response_format_error(), _response_with_usage(VALID_JSON_TEXT), side_effect=True
+    )
+    events = []
+
+    _run(
+        GroqOpenAiLlmClient(allow_provider_fallback=False, trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA, _settings("groq")
+        )
+    )
+
+    assert len([e for e in events if e.event == "physical_attempt"]) == 2
+    assert len([e for e in events if e.event == "physical_failed"]) == 1
+    assert len([e for e in events if e.event == "schema_fallback"]) == 1
+    assert len([e for e in events if e.event == "physical_request"]) == 1

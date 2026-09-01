@@ -413,3 +413,26 @@ def test_run_continues_after_one_question_raises_and_records_error_row(
     assert error_row["generated_answer"] == ""
     assert error_row["cited_document_ids"] == ""
     assert error_row["retrieval_succeeded"] == ""
+
+    # the raw exception message must never reach an artifact - only its type
+    assert "simulated transient network error" not in report_text
+
+
+def test_error_row_records_only_exception_type_not_message():
+    from src.features.evaluation.generation_eval import _error_row
+
+    row = _error_row(
+        {
+            "id": "q",
+            "language": "en",
+            "answerable": True,
+            "question": "q",
+            "expected_answer": "",
+            "expected_document_id": "",
+            "expected_section_heading": "",
+        },
+        12.0,
+        RuntimeError("SENSITIVE prompt echoed back by provider"),
+    )
+    assert row["error"] == "RuntimeError"
+    assert "SENSITIVE" not in json.dumps(row)

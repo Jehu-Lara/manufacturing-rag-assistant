@@ -66,7 +66,7 @@ def run(
         "",
     ]
     assert_live_index_profile(index_profile)
-    retriever = build_retriever(expansion_mode)
+    retriever = build_retriever(expansion_mode, expected_profile=index_profile)
     rows = [_row(retriever, q, threshold) for q in data["queries"]]
     lines += [
         f"## expansion_mode = {expansion_mode}",
