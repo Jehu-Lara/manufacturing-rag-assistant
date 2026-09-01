@@ -1,0 +1,60 @@
+{
+  "status": "draft",
+  "cells": [
+    {
+      "language": "en",
+      "answerable": true,
+      "total": 12,
+      "hard_refuse": 0,
+      "grounded_review": 3,
+      "confident": 9,
+      "grey_ids": [
+        "h013",
+        "h019",
+        "h021"
+      ]
+    },
+    {
+      "language": "en",
+      "answerable": false,
+      "total": 12,
+      "hard_refuse": 2,
+      "grounded_review": 4,
+      "confident": 6,
+      "grey_ids": [
+        "h025",
+        "h031",
+        "h041",
+        "h045"
+      ]
+    },
+    {
+      "language": "es",
+      "answerable": true,
+      "total": 12,
+      "hard_refuse": 2,
+      "grounded_review": 3,
+      "confident": 7,
+      "grey_ids": [
+        "h014",
+        "h020",
+        "h022"
+      ]
+    },
+    {
+      "language": "es",
+      "answerable": false,
+      "total": 12,
+      "hard_refuse": 6,
+      "grounded_review": 5,
+      "confident": 1,
+      "grey_ids": [
+        "h026",
+        "h028",
+        "h036",
+        "h038",
+        "h044"
+      ]
+    }
+  ]
+}
