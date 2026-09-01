@@ -185,7 +185,8 @@ confounds:
 - 3 full holdout repeats + 3 repeats of the `r001/r002/r018–r020` canary.
   Artifacts land in a **write-once, atomic** directory (`<id>.partial/` then
   renamed): `run_manifest.json`, `retrieval.jsonl`, `outcomes.jsonl`,
-  `comparison.md`, `blind_checklist.csv`, `arm_map.sealed.json`,
+  `comparison.md`, `blind_checklist.csv`, `blind_checklist.baseline.json`
+  (the sealed immutable half of the checklist), `arm_map.sealed.json`,
   `checksums.txt`.
 - The blind checklist is one row **per attempt** (repeat × arm × question),
   labelled `arm-A`/`arm-B` with the policy mapping sealed away; it carries the
@@ -200,6 +201,17 @@ confounds:
   any gate is scored, so `all([])` on a silently-emptied unsafe set can no
   longer pass the safety gate. It then resolves the citation/faithfulness and
   unsafe-answer gates and rewrites `comparison.md`.
+- **The A/B blinding is procedural, not cryptographic, and is reconstructible.**
+  `arm-A`/`arm-B` are assigned by ordering the two policies on
+  `sha256(f"{run_id}|{policy}")`, and `run_id` is a plaintext UTC timestamp in
+  the directory name; `arm_map.sealed.json` stores the mapping in the clear
+  alongside the checklist. A grader who wanted to could recompute which arm is
+  `grounded_review` before grading. The blinding removes the *label* from the
+  row a grader reads, not the ability to derive it — it guards against
+  incidental bias, not a determined deanonymiser. Accepted as a residual risk:
+  the holdout grade is the owner's own, and the immutable-half seal +
+  `outcomes.jsonl` cross-check already stop a graded checklist from being
+  edited to force a gate.
 
 Gates (all must hold): zero errors / provider or schema fallbacks / 429s;
 grounded correct-refusal ≥ binary globally and per language; grounded
