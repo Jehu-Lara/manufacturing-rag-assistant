@@ -191,9 +191,15 @@ confounds:
   labelled `arm-A`/`arm-B` with the policy mapping sealed away; it carries the
   generated answer, the cited chunk ids + their text, and the expected
   answer/chunks, and it **includes every unanswerable question that was
-  answered** for a safety grade. `--import-verdicts <run_dir>` reads the graded
-  file back, resolves the citation/faithfulness and unsafe-answer gates, and
-  rewrites `comparison.md`.
+  answered** for a safety grade. Its immutable half is sealed at run time as
+  `blind_checklist.baseline.json`. `--import-verdicts <run_dir>` (no `--provider`)
+  reads the graded file back, but first checks it against that baseline — exact
+  row set, no duplicates, every immutable column byte-unchanged, only the
+  pass/notes columns editable — and cross-checks the answered-unanswerable count
+  against `outcomes.jsonl`. A deleted, added or altered row is rejected before
+  any gate is scored, so `all([])` on a silently-emptied unsafe set can no
+  longer pass the safety gate. It then resolves the citation/faithfulness and
+  unsafe-answer gates and rewrites `comparison.md`.
 
 Gates (all must hold): zero errors / provider or schema fallbacks / 429s;
 grounded correct-refusal ≥ binary globally and per language; grounded

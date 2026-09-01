@@ -290,32 +290,82 @@ def test_checklist_is_opaque_per_attempt_and_includes_unsafe_unanswerables():
     assert any(r["expected_answer"] == "gold" for r in rows)
 
 
-def test_import_human_verdicts_roundtrip(tmp_path: Path):
-    path = tmp_path / "blind_checklist.csv"
+def _blank(**over) -> dict[str, str]:
+    row = {k: "" for k in gge._CHECKLIST_HEADER}
+    row.update(over)
+    return row
+
+
+def _checklist_pair() -> list[dict[str, str]]:
+    return [
+        _blank(row_id="a", arm="arm-A", repeat="1", question_id="h0", language="en",
+               answerable="True", refused="False", answer="ans", cited_chunk_ids="c1",
+               cited_chunk_texts="t", expected_answer="gold", expected_chunk_ids="c1"),
+        _blank(row_id="b", arm="arm-B", repeat="1", question_id="u1", language="es",
+               answerable="False", refused="False", answer="oops"),
+    ]
+
+
+def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=gge._CHECKLIST_HEADER)
         w.writeheader()
-        w.writerow({**{k: "" for k in gge._CHECKLIST_HEADER}, "row_id": "a", "arm": "arm-A", "repeat": "1",
-                    "question_id": "h0", "language": "en", "answerable": "True", "refused": "False",
-                    "citation_accuracy_pass": "y", "faithfulness_pass": "y"})
-        w.writerow({**{k: "" for k in gge._CHECKLIST_HEADER}, "row_id": "b", "arm": "arm-B", "repeat": "1",
-                    "question_id": "u1", "language": "es", "answerable": "False", "refused": "False",
-                    "safe_pass": "n"})
-    v = gge.import_human_verdicts(path)
+        w.writerows(rows)
+
+
+def test_import_human_verdicts_roundtrip(tmp_path: Path):
+    rows = _checklist_pair()
+    baseline = gge.checklist_baseline(rows)
+    rows[0].update(citation_accuracy_pass="y", faithfulness_pass="y")
+    rows[1].update(safe_pass="n")
+    path = tmp_path / "blind_checklist.csv"
+    _write_csv(path, rows)
+
+    v = gge.import_human_verdicts(path, baseline)
     assert v.citation_pass_rate == 1.0
     assert v.unsafe_unanswerable_rows == 1
     assert v.unsafe_all_safe is False
 
 
 def test_import_human_verdicts_rejects_ungraded(tmp_path: Path):
+    rows = _checklist_pair()
+    baseline = gge.checklist_baseline(rows)
     path = tmp_path / "blind_checklist.csv"
-    with path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=gge._CHECKLIST_HEADER)
-        w.writeheader()
-        w.writerow({**{k: "" for k in gge._CHECKLIST_HEADER}, "row_id": "a", "arm": "arm-A", "repeat": "1",
-                    "question_id": "h0", "language": "en", "answerable": "True", "refused": "False"})
+    _write_csv(path, rows)
     with pytest.raises(ValueError, match="not fully graded"):
-        gge.import_human_verdicts(path)
+        gge.import_human_verdicts(path, baseline)
+
+
+def test_import_human_verdicts_rejects_deleted_row(tmp_path: Path):
+    rows = _checklist_pair()
+    baseline = gge.checklist_baseline(rows)
+    rows[0].update(citation_accuracy_pass="y", faithfulness_pass="y")
+    path = tmp_path / "blind_checklist.csv"
+    _write_csv(path, rows[:1])  # unsafe row 'b' deleted
+    with pytest.raises(ValueError, match="does not match the sealed baseline"):
+        gge.import_human_verdicts(path, baseline)
+
+
+def test_import_human_verdicts_rejects_added_or_duplicate_row(tmp_path: Path):
+    rows = _checklist_pair()
+    baseline = gge.checklist_baseline(rows)
+    for r in rows:
+        r.update(citation_accuracy_pass="y", faithfulness_pass="y", safe_pass="y")
+    path = tmp_path / "blind_checklist.csv"
+    _write_csv(path, [*rows, dict(rows[0])])  # duplicate row_id 'a'
+    with pytest.raises(ValueError, match="duplicate row_id"):
+        gge.import_human_verdicts(path, baseline)
+
+
+def test_import_human_verdicts_rejects_altered_immutable_field(tmp_path: Path):
+    rows = _checklist_pair()
+    baseline = gge.checklist_baseline(rows)
+    rows[0].update(citation_accuracy_pass="y", faithfulness_pass="y", answer="doctored answer")
+    rows[1].update(safe_pass="y")
+    path = tmp_path / "blind_checklist.csv"
+    _write_csv(path, rows)
+    with pytest.raises(ValueError, match="altered immutable column"):
+        gge.import_human_verdicts(path, baseline)
 
 
 # --- write_run_dir atomic -------------------------------------------
@@ -352,6 +402,7 @@ def test_write_run_dir_is_atomic_write_once_and_checksummed(tmp_path: Path):
         "outcomes.jsonl",
         "comparison.md",
         "blind_checklist.csv",
+        "blind_checklist.baseline.json",
         "arm_map.sealed.json",
         "checksums.txt",
     ):
@@ -359,6 +410,18 @@ def test_write_run_dir_is_atomic_write_once_and_checksummed(tmp_path: Path):
     assert not (tmp_path / "gate_generation_eval_TEST.partial").exists()
     with pytest.raises(FileExistsError):
         gge.write_run_dir(tmp_path, **_write_args(tmp_path))
+
+
+def test_cli_import_verdicts_does_not_require_provider(tmp_path: Path, monkeypatch):
+    called = {}
+    monkeypatch.setattr(gge, "import_verdicts_into_run", lambda run_dir: called.setdefault("dir", run_dir))
+    gge.main(["--import-verdicts", str(tmp_path / "somerun")])
+    assert called["dir"] == tmp_path / "somerun"
+
+
+def test_cli_paid_run_requires_provider():
+    with pytest.raises(SystemExit):
+        gge.main(["--full-repeats", "1"])
 
 
 # --- run() end to end -------------------------------------------------

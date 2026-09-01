@@ -360,7 +360,9 @@ _CHECKLIST_HEADER = [
     "safe_pass",
     "notes",
 ]
+_EDITABLE_COLUMNS = ("citation_accuracy_pass", "faithfulness_pass", "safe_pass", "notes")
 _VERDICT_COLUMNS = ("citation_accuracy_pass", "faithfulness_pass", "safe_pass")
+_IMMUTABLE_COLUMNS = tuple(c for c in _CHECKLIST_HEADER if c not in _EDITABLE_COLUMNS)
 
 
 def _arm_labels(run_id: str) -> dict[str, str]:
@@ -417,6 +419,13 @@ def _write_checklist(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def checklist_baseline(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
+    """The immutable half of every checklist row, keyed by row_id. Sealed at run
+    time; on import the graded CSV must reproduce it exactly - a deleted,
+    added, duplicated or altered row is rejected before any gate is scored."""
+    return {row["row_id"]: {col: row[col] for col in _IMMUTABLE_COLUMNS} for row in rows}
+
+
 @dataclass
 class HumanVerdicts:
     graded_rows: int
@@ -435,18 +444,54 @@ def _parse_pass(value: str) -> Optional[bool]:
     return None
 
 
-def import_human_verdicts(checklist_path: Path) -> HumanVerdicts:
+def _verify_against_baseline(
+    rows: list[dict[str, str]], baseline: dict[str, dict[str, str]]
+) -> None:
+    for row in rows:
+        if set(row) != set(_CHECKLIST_HEADER):
+            raise ValueError(
+                f"blind checklist row has unexpected columns: {sorted(set(row) ^ set(_CHECKLIST_HEADER))}"
+            )
+    ids = [r["row_id"] for r in rows]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    if dupes:
+        raise ValueError(f"blind checklist has duplicate row_id(s): {dupes}")
+    missing = sorted(set(baseline) - set(ids))
+    extra = sorted(set(ids) - set(baseline))
+    if missing or extra:
+        raise ValueError(
+            f"blind checklist row set does not match the sealed baseline - missing {missing}, extra {extra}. "
+            "Grade the file the runner produced; do not add, delete or reorder rows."
+        )
+    for row in rows:
+        expected = baseline[row["row_id"]]
+        drifted = [c for c in _IMMUTABLE_COLUMNS if row[c] != expected[c]]
+        if drifted:
+            raise ValueError(
+                f"blind checklist row {row['row_id']!r} altered immutable column(s) {drifted}; "
+                "only the pass/notes columns may be edited"
+            )
+
+
+def import_human_verdicts(
+    checklist_path: Path, baseline: dict[str, dict[str, str]]
+) -> HumanVerdicts:
     with checklist_path.open("r", encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
+    if not rows:
+        raise ValueError("blind checklist is empty")
+    _verify_against_baseline(rows, baseline)
+
     answerable_rows = [r for r in rows if r["answerable"] == "True" and r["refused"] == "False"]
     unsafe_rows = [r for r in rows if r["answerable"] == "False" and r["refused"] == "False"]
-    if not rows or any(
+    ungraded = any(
         _parse_pass(r[col]) is None
         for r in rows
         for col in _VERDICT_COLUMNS
         if not (col == "safe_pass" and r["answerable"] == "True")
         and not (col in ("citation_accuracy_pass", "faithfulness_pass") and r["answerable"] == "False")
-    ):
+    )
+    if ungraded:
         raise ValueError(
             "blind checklist is not fully graded - every row needs y/n in the pass columns "
             "that apply to it (citation/faithfulness for answered questions, safe for "
@@ -742,6 +787,9 @@ def write_run_dir(
         render_comparison(manifest, snapshots, holdout, canary, gates), encoding="utf-8"
     )
     _write_checklist(partial / "blind_checklist.csv", checklist_rows)
+    (partial / "blind_checklist.baseline.json").write_text(
+        json.dumps(checklist_baseline(checklist_rows), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     (partial / "arm_map.sealed.json").write_text(
         json.dumps(arm_map, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -930,7 +978,15 @@ def import_verdicts_into_run(run_dir: Path) -> Path:
         RetrievalSnapshot(**json.loads(line))
         for line in (run_dir / "retrieval.jsonl").read_text(encoding="utf-8").splitlines()
     ]
-    verdicts = import_human_verdicts(run_dir / "blind_checklist.csv")
+    baseline = json.loads((run_dir / "blind_checklist.baseline.json").read_text(encoding="utf-8"))
+    verdicts = import_human_verdicts(run_dir / "blind_checklist.csv", baseline)
+
+    runner_unsafe = sum(1 for o in outcomes if o.is_unsafe_unanswerable)
+    if verdicts.unsafe_unanswerable_rows != runner_unsafe:
+        raise ValueError(
+            f"blind checklist has {verdicts.unsafe_unanswerable_rows} answered-unanswerable row(s) but "
+            f"outcomes.jsonl has {runner_unsafe} - the checklist was tampered with"
+        )
     gates = evaluate_gates(holdout, canary, verdicts)
     manifest["verdicts_imported"] = True
     (run_dir / "run_manifest.json").write_text(
@@ -951,16 +1007,19 @@ def import_verdicts_into_run(run_dir: Path) -> Path:
     return run_dir
 
 
-def main() -> None:
+def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--provider", required=True, choices=["groq", "openai"])
+    parser.add_argument("--provider", choices=["groq", "openai"], default=None)
     parser.add_argument("--full-repeats", type=int, default=FULL_REPEATS)
     parser.add_argument("--canary-repeats", type=int, default=CANARY_REPEATS)
     parser.add_argument("--import-verdicts", type=Path, default=None, metavar="RUN_DIR")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
     if args.import_verdicts is not None:
         import_verdicts_into_run(args.import_verdicts)
         return
+    if args.provider is None:
+        parser.error("--provider {groq|openai} is required for a paid run")
     run(provider=args.provider, full_repeats=args.full_repeats, canary_repeats=args.canary_repeats)
 
 
