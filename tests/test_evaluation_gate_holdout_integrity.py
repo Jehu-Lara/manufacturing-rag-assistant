@@ -96,12 +96,13 @@ def test_valid_frozen_48_question_holdout_verifies(tmp_path: Path):
     gate_holdout_integrity.verify(path, **_verify_kwargs(tmp_path))
 
 
-def test_committed_holdout_is_still_a_draft_and_is_rejected():
-    """The shipped eval/gate_holdout_v1.0.0.json is an empty draft on purpose;
-    the owner must author + freeze the 48 questions. CI is red on the dedicated
-    holdout step by design until that happens."""
-    with pytest.raises(ValueError, match="frozen"):
-        gate_holdout_integrity.verify()
+def test_committed_holdout_is_frozen_and_verifies():
+    """eval/gate_holdout_v1.0.0.json was frozen 2026-09-01 after owner content
+    approval (ADR-009 §6). The real committed file must pass hash + composition
+    against the live corpus and the frozen eval / regression sets."""
+    if not gate_holdout_integrity.CHUNKS_FILE.exists():
+        pytest.skip("chunks.jsonl not built — run `python -m src.features.ingestion.cli`")
+    gate_holdout_integrity.verify()
 
 
 def test_verify_rejects_hash_drift(tmp_path: Path):

@@ -1,6 +1,6 @@
 # Gate Holdout Band Profile
 
-- Holdout status: `draft`
+- Holdout status: `frozen`
 - Band: `[0.55, 0.5999)` on contextual-v1/off
 - Required grounded-review questions per cell: 3
 

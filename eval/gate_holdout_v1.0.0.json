@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "sha256": "f3950a6dd76e71fda6605d412fec95ae6c369fb0401a0265a9b6f2fd79c9f213",
-  "status": "draft",
-  "_note": "Phase 3 gate holdout draft - pending owner content approval. The 48 questions are authored and profiled; sha256 tracks this draft for integrity, but status must remain draft until approval. After approval only: set status to frozen, rerun gate_holdout_integrity --write, then --verify.",
+  "status": "frozen",
+  "_note": "Phase 3 gate holdout - frozen 2026-09-01 after owner content approval (wording, difficulty, intent, expected absence). 48 questions / 24 EN-ES pairs / 24 answerable / 24 unanswerable. sha256 is over the parsed `questions` only; contract in ADR-009. Operational rollback is REFUSAL_POLICY=binary, not editing this file.",
   "questions": [
     {
       "id": "h001",
