@@ -9,6 +9,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, cast
 
+from src.features.evaluation import eval_set_integrity, regression_set_integrity
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 # Same path as src.features.retrieval.index_manifest.CHUNKS_FILE, redefined
 # locally so the integrity guard never pulls in the embedder import chain.
@@ -57,13 +59,23 @@ def _known_chunk_ids(chunks_path: Path) -> set[str]:
 
 
 def _forbidden_question_texts(eval_set_path: Path, regression_set_path: Path) -> set[str]:
+    """The holdout is de-duplicated against the FROZEN eval_set / regression
+    sets — both must be present and pass their own integrity check, so the
+    comparison can never be silently narrowed by a missing or tampered file."""
+    for path, name in ((eval_set_path, "eval_set.json"), (regression_set_path, "regression_queries.json")):
+        if not path.exists():
+            raise ValueError(
+                f"{name} not found at {path} - the holdout is de-duplicated against "
+                f"the frozen {name}; it must be present and frozen before the holdout verifies"
+            )
+    eval_set_integrity.verify(eval_set_path)
+    regression_set_integrity.verify(regression_set_path)
+
     forbidden: set[str] = set()
-    if eval_set_path.exists():
-        for question in json.loads(eval_set_path.read_text(encoding="utf-8")).get("questions", []):
-            forbidden.add(_normalized(question["question"]))
-    if regression_set_path.exists():
-        for query in json.loads(regression_set_path.read_text(encoding="utf-8")).get("queries", []):
-            forbidden.add(_normalized(query["query"]))
+    for question in eval_set_integrity.load_eval_set(eval_set_path).get("questions", []):
+        forbidden.add(_normalized(question["question"]))
+    for query in regression_set_integrity.load_regression_set(regression_set_path).get("queries", []):
+        forbidden.add(_normalized(query["query"]))
     return forbidden
 
 
@@ -123,6 +135,13 @@ def _validate_pairs(questions: list[dict[str, Any]]) -> None:
             raise ValueError(f"pair_id {pair_id!r} is not one EN + one ES")
         if len({m["answerable"] for m in members}) != 1:
             raise ValueError(f"pair_id {pair_id!r}: EN and ES disagree on 'answerable'")
+        if members[0]["answerable"]:
+            chunk_id_sets = [frozenset(m.get("expected_chunk_ids", [])) for m in members]
+            if chunk_id_sets[0] != chunk_id_sets[1]:
+                raise ValueError(
+                    f"pair_id {pair_id!r}: the EN and ES answerable halves must target the "
+                    f"same expected_chunk_ids (got {sorted(chunk_id_sets[0])} vs {sorted(chunk_id_sets[1])})"
+                )
 
 
 def validate_composition(
@@ -160,6 +179,18 @@ def validate_composition(
     forbidden_texts = _forbidden_question_texts(eval_set_path, regression_set_path)
     for question in questions:
         _validate_question(question, known_chunk_ids, forbidden_texts)
+
+    normalized_by_text: dict[str, list[str]] = defaultdict(list)
+    for question in questions:
+        normalized_by_text[_normalized(question["question"])].append(str(question["id"]))
+    internal_dupes = {text: ids for text, ids in normalized_by_text.items() if len(ids) > 1}
+    if internal_dupes:
+        raise ValueError(
+            "gate holdout has questions that are identical after normalization "
+            f"(NFKC + casefold + whitespace): {internal_dupes}. Each EN and each ES "
+            "question must be a distinct intent; a paired EN/ES question is not a duplicate "
+            "because the two are in different languages."
+        )
 
     _validate_pairs(questions)
 
@@ -204,11 +235,16 @@ def verify(
 
 
 def write(path: Path = GATE_HOLDOUT_FILE) -> None:
+    """Atomic: a crash mid-write must never leave a truncated frozen dataset.
+    Does NOT author or generate questions — it only re-stamps the sha256 over
+    whatever `questions` a human has already placed in the file."""
     data = load_gate_holdout(path)
     data["sha256"] = compute_hash(data["questions"])
-    with path.open("w", encoding="utf-8", newline="\n") as f:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8", newline="\n") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
+    tmp.replace(path)
 
 
 def main() -> None:

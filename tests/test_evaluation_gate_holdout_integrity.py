@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.features.evaluation import gate_holdout_integrity
+from src.features.evaluation import eval_set_integrity, gate_holdout_integrity, regression_set_integrity
 
 _KNOWN_CHUNK_IDS = [f"doc-a::chunk-{i:04d}" for i in range(12)]
 
@@ -19,11 +19,27 @@ def _chunks_file(tmp_path: Path) -> Path:
     return path
 
 
+def _eval_set_file(tmp_path: Path, questions: list[dict] | None = None) -> Path:
+    questions = questions if questions is not None else [{"id": "e1", "question": "an unrelated eval question"}]
+    path = tmp_path / "eval_set.json"
+    payload = {"version": "test", "sha256": eval_set_integrity.compute_hash(questions), "questions": questions}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _regression_file(tmp_path: Path, queries: list[dict] | None = None) -> Path:
+    queries = queries if queries is not None else [{"id": "r1", "query": "an unrelated regression query"}]
+    path = tmp_path / "regression_queries.json"
+    payload = {"version": "test", "sha256": regression_set_integrity.compute_hash(queries), "queries": queries}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
 def _verify_kwargs(tmp_path: Path) -> dict:
     return {
         "chunks_path": _chunks_file(tmp_path),
-        "eval_set_path": tmp_path / "no_eval.json",
-        "regression_set_path": tmp_path / "no_regression.json",
+        "eval_set_path": _eval_set_file(tmp_path),
+        "regression_set_path": _regression_file(tmp_path),
     }
 
 
@@ -183,31 +199,94 @@ def test_verify_rejects_unanswerable_missing_absence_note(tmp_path: Path):
 
 def test_verify_rejects_question_colliding_with_eval_set(tmp_path: Path):
     questions = _valid_questions()
-    eval_set = tmp_path / "eval_set.json"
-    eval_set.write_text(
-        json.dumps({"questions": [{"question": "Answerable Intent 0   (EN)"}]}), encoding="utf-8"
-    )
     path = _frozen_holdout(tmp_path, questions)
     with pytest.raises(ValueError, match="collides"):
         gate_holdout_integrity.verify(
             path,
             chunks_path=_chunks_file(tmp_path),
-            eval_set_path=eval_set,
-            regression_set_path=tmp_path / "no_regression.json",
+            eval_set_path=_eval_set_file(
+                tmp_path, questions=[{"id": "e1", "question": "Answerable Intent 0   (EN)"}]
+            ),
+            regression_set_path=_regression_file(tmp_path),
         )
 
 
 def test_verify_rejects_question_colliding_with_regression_set(tmp_path: Path):
     questions = _valid_questions()
-    regression = tmp_path / "regression_queries.json"
-    regression.write_text(
-        json.dumps({"queries": [{"query": "unanswerable intent 3 (es)"}]}), encoding="utf-8"
-    )
     path = _frozen_holdout(tmp_path, questions)
     with pytest.raises(ValueError, match="collides"):
         gate_holdout_integrity.verify(
             path,
             chunks_path=_chunks_file(tmp_path),
-            eval_set_path=tmp_path / "no_eval.json",
-            regression_set_path=regression,
+            eval_set_path=_eval_set_file(tmp_path),
+            regression_set_path=_regression_file(
+                tmp_path, queries=[{"id": "r1", "query": "unanswerable intent 3 (es)"}]
+            ),
         )
+
+
+def test_verify_requires_eval_set_present(tmp_path: Path):
+    path = _frozen_holdout(tmp_path, _valid_questions())
+    with pytest.raises(ValueError, match="eval_set.json not found"):
+        gate_holdout_integrity.verify(
+            path,
+            chunks_path=_chunks_file(tmp_path),
+            eval_set_path=tmp_path / "missing_eval.json",
+            regression_set_path=_regression_file(tmp_path),
+        )
+
+
+def test_verify_requires_regression_set_present(tmp_path: Path):
+    path = _frozen_holdout(tmp_path, _valid_questions())
+    with pytest.raises(ValueError, match="regression_queries.json not found"):
+        gate_holdout_integrity.verify(
+            path,
+            chunks_path=_chunks_file(tmp_path),
+            eval_set_path=_eval_set_file(tmp_path),
+            regression_set_path=tmp_path / "missing_regression.json",
+        )
+
+
+def test_verify_rejects_tampered_eval_set(tmp_path: Path):
+    path = _frozen_holdout(tmp_path, _valid_questions())
+    eval_set = _eval_set_file(tmp_path)
+    payload = json.loads(eval_set.read_text(encoding="utf-8"))
+    payload["questions"][0]["question"] = "silently changed after freezing"
+    eval_set.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="sha256 mismatch"):
+        gate_holdout_integrity.verify(
+            path,
+            chunks_path=_chunks_file(tmp_path),
+            eval_set_path=eval_set,
+            regression_set_path=_regression_file(tmp_path),
+        )
+
+
+def test_verify_rejects_internal_normalized_duplicate(tmp_path: Path):
+    questions = _valid_questions()
+    questions[2]["question"] = "Answerable   Intent 0 (EN)"  # normalizes to questions[0]
+    path = _frozen_holdout(tmp_path, questions)
+    with pytest.raises(ValueError, match="identical after normalization"):
+        gate_holdout_integrity.verify(path, **_verify_kwargs(tmp_path))
+
+
+def test_verify_rejects_answerable_pair_with_mismatched_expected_chunks(tmp_path: Path):
+    questions = _valid_questions()
+    questions[1]["expected_chunk_ids"] = [_KNOWN_CHUNK_IDS[5]]  # ES half of pair a00 now differs from EN
+    path = _frozen_holdout(tmp_path, questions)
+    with pytest.raises(ValueError, match="same expected_chunk_ids"):
+        gate_holdout_integrity.verify(path, **_verify_kwargs(tmp_path))
+
+
+def test_write_is_atomic_and_leaves_no_tmp_file(tmp_path: Path):
+    questions = _valid_questions()
+    path = tmp_path / "gate_holdout.json"
+    path.write_text(
+        json.dumps({"version": "1.0.0", "sha256": "stale", "status": "frozen", "questions": questions}),
+        encoding="utf-8",
+    )
+    gate_holdout_integrity.write(path)
+    assert not path.with_suffix(path.suffix + ".tmp").exists()
+    assert json.loads(path.read_text(encoding="utf-8"))["sha256"] == gate_holdout_integrity.compute_hash(
+        questions
+    )
