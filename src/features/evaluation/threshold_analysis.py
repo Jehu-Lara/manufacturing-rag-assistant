@@ -4,24 +4,20 @@ import statistics
 from pathlib import Path
 from typing import Any
 
-from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
-from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
-from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
-from src.core.config import load_settings
 from src.features.evaluation import eval_set_integrity, metrics
+from src.features.evaluation._eval_retriever import build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
 REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
 
 SWEEP_STEP = 0.02
 
+_LANGUAGES: list[tuple[str, str]] = [("en", "English"), ("es", "Spanish")]
 
-def _build_retriever() -> HybridRetriever:
-    settings = load_settings()
-    embedder = SentenceTransformersEmbedder()
-    vector_store = ChromaVectorStore(persist_dir=settings.chroma_path, embedder=embedder)
-    lexical_index = Bm25LexicalIndex(persist_path=settings.bm25_path)
-    return HybridRetriever(vector_store, lexical_index)
+DIAGNOSTIC_NOTE = (
+    "Per-language tables are diagnostic; the shipped threshold remains the "
+    "pooled selection (0.5999 override, SPEC.md Phase 3)."
+)
 
 
 def _top1_semantic_score(retriever: HybridRetriever, question_text: str) -> float:
@@ -106,8 +102,67 @@ def _stats_line(scores: list[float]) -> str:
     )
 
 
+def _filter_by_language(scores: list[float], languages: list[str], target: str) -> list[float]:
+    return [score for score, language in zip(scores, languages, strict=True) if language == target]
+
+
+def _language_sections(
+    unanswerable_scores: list[float],
+    answerable_scores: list[float],
+    unanswerable_languages: list[str],
+    answerable_languages: list[str],
+) -> list[str]:
+    lines: list[str] = [
+        "## Per-language diagnostics",
+        "",
+        DIAGNOSTIC_NOTE,
+        "",
+    ]
+    for code, label in _LANGUAGES:
+        lang_unanswerable = _filter_by_language(unanswerable_scores, unanswerable_languages, code)
+        lang_answerable = _filter_by_language(answerable_scores, answerable_languages, code)
+
+        lines += [
+            f"## {label} — answerable/unanswerable top-1 semantic_score",
+            "",
+            f"- Unanswerable (n={len(lang_unanswerable)}): sorted={sorted(lang_unanswerable)}",
+        ]
+        if lang_unanswerable:
+            lines.append(f"  - Stats: {_stats_line(lang_unanswerable)}")
+        lines.append(f"- Answerable (n={len(lang_answerable)}): sorted={sorted(lang_answerable)}")
+        if lang_answerable:
+            lines.append(f"  - Stats: {_stats_line(lang_answerable)}")
+
+        lines += ["", f"## {label} — cutoff sweep", ""]
+        if not lang_unanswerable or not lang_answerable:
+            lines += ["_Not enough per-language data to sweep._", ""]
+            continue
+
+        lines += [
+            "| threshold | answerable wrongly refused | unanswerable correctly refused | objective (correct - wrong) |",
+            "|---|---|---|---|",
+        ]
+        sweep_low = min(lang_unanswerable) - SWEEP_STEP
+        sweep_high = max(lang_answerable) + SWEEP_STEP
+        for candidate in sweep_thresholds(sweep_low, sweep_high):
+            wrongly_refused, correctly_refused = _refusal_counts(
+                candidate, lang_unanswerable, lang_answerable
+            )
+            lines.append(
+                f"| {candidate:.4f} | {wrongly_refused} | {correctly_refused} | "
+                f"{correctly_refused - wrongly_refused} |"
+            )
+        lines.append("")
+    return lines
+
+
 def build_report(
-    unanswerable_scores: list[float], answerable_scores: list[float], selection: dict[str, Any], version: str
+    unanswerable_scores: list[float],
+    answerable_scores: list[float],
+    unanswerable_languages: list[str],
+    answerable_languages: list[str],
+    selection: dict[str, Any],
+    version: str,
 ) -> str:
     lines = [
         f"# Refusal Threshold Analysis — eval_set v{version}",
@@ -170,7 +225,18 @@ def build_report(
             ),
             f"- Chosen threshold = **{selection['threshold']:.4f}**.",
         ]
-    lines += ["", f"**Chosen REFUSAL_COSINE_THRESHOLD: {selection['threshold']:.4f}**", ""]
+    lines += [
+        "",
+        (
+            "**Analyzer-selected threshold on this eval set (diagnostic only — NOT applied; "
+            f"production REFUSAL_COSINE_THRESHOLD stays 0.5999): {selection['threshold']:.4f}**"
+        ),
+        "",
+    ]
+
+    lines += _language_sections(
+        unanswerable_scores, answerable_scores, unanswerable_languages, answerable_languages
+    )
 
     return "\n".join(lines) + "\n"
 
@@ -180,22 +246,34 @@ def run() -> Path:
     data = eval_set_integrity.load_eval_set()
     questions = data["questions"]
 
-    retriever = _build_retriever()
+    retriever = build_retriever()
     answerable = [q for q in questions if q["answerable"]]
     unanswerable = [q for q in questions if not q["answerable"]]
 
     answerable_scores = [_top1_semantic_score(retriever, q["question"]) for q in answerable]
     unanswerable_scores = [_top1_semantic_score(retriever, q["question"]) for q in unanswerable]
+    answerable_languages = [str(q["language"]) for q in answerable]
+    unanswerable_languages = [str(q["language"]) for q in unanswerable]
 
     selection = select_threshold(unanswerable_scores, answerable_scores)
 
-    report = build_report(unanswerable_scores, answerable_scores, selection, data["version"])
+    report = build_report(
+        unanswerable_scores,
+        answerable_scores,
+        unanswerable_languages,
+        answerable_languages,
+        selection,
+        data["version"],
+    )
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"threshold_analysis_v{data['version']}.md"
-    report_path.write_text(report, encoding="utf-8")
+    report_path.write_text(report, encoding="utf-8", newline="\n")
 
-    print(f"Chosen REFUSAL_COSINE_THRESHOLD: {selection['threshold']:.4f}")
+    print(
+        "Analyzer-selected threshold (diagnostic only, NOT applied): "
+        f"{selection['threshold']:.4f}"
+    )
     print(f"Selection branch: {selection['branch']}")
     print(f"Report written to: {report_path}")
 

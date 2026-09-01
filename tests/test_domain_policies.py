@@ -4,9 +4,11 @@ import logging
 
 from src.domain.models import Citation, RetrievalResult
 from src.domain.policies import (
+    GLOSSARY,
     RRF_K,
     CitationResolver,
     RefusalPolicy,
+    expand_query,
     fuse_rankings,
     is_confident,
     rrf_scores,
@@ -150,3 +152,56 @@ def test_citation_resolver_empty_llm_citations_returns_empty_list_no_error():
     resolved = CitationResolver.resolve([], results)
 
     assert resolved == []
+
+
+def test_expand_query_passthrough_when_no_glossary_key():
+    q = "What is the frame level tolerance for the conveyor?"
+    assert expand_query(q) == q
+
+
+def test_expand_query_appends_expansions_for_known_acronym():
+    out = expand_query("What is the difference between NPSHA and NPSHR?")
+    assert out.startswith("What is the difference between NPSHA and NPSHR?")
+    assert "net positive suction head available" in out
+    assert "net positive suction head required" in out
+    assert "altura neta de succión positiva disponible" in out
+
+
+def test_expand_query_is_case_insensitive_and_word_bounded():
+    assert "net positive suction head available" in expand_query("what is npsha")
+    unchanged = "the NPSHATEST rig and xNPSHA probe"
+    assert expand_query(unchanged) == unchanged
+
+
+def test_expand_query_multi_term_order_is_deterministic():
+    a = expand_query("PEL and IDLH for acetone")
+    b = expand_query("IDLH and PEL for acetone")
+    # additions ordered by GLOSSARY insertion order, not query order → identical tails
+    assert a.split("for acetone", 1)[1] == b.split("for acetone", 1)[1]
+    assert expand_query("PEL and IDLH for acetone") == a  # stable across calls
+
+
+def test_expand_query_dedupes_expansion_already_present():
+    q = "define permissible exposure limit PEL"
+    out = expand_query(q)
+    assert out.count("permissible exposure limit") == 1
+
+
+def test_glossary_english_expansions_are_corpus_attested():
+    import pathlib
+
+    corpus_text = " ".join(
+        p.read_text(encoding="utf-8").lower()
+        for p in pathlib.Path("corpus").rglob("*.md")
+    )
+    for key, expansions in GLOSSARY.items():
+        english = expansions[0]
+        assert english.lower() in corpus_text, f"{key}: {english!r} not found in corpus"
+
+
+def test_glossary_spanish_renderings_nonempty_and_distinct():
+    for key, expansions in GLOSSARY.items():
+        assert len(expansions) >= 2, f"{key}: needs an es rendering"
+        es = expansions[1]
+        assert es.strip()
+        assert es.lower() != expansions[0].lower()

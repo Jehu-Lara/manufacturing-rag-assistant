@@ -1,0 +1,506 @@
+{
+  "version": "1.0.0",
+  "sha256": "69f76a6b7223a9cbe7fb78423d29d748a7cc28483f6c66fef271e251cccfb2e0",
+  "questions": [
+    {
+      "id": "q001",
+      "question": "What must an energy-control procedure include according to OSHA's lockout/tagout requirements?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0008"
+      ],
+      "expected_document_id": "osha-3120-lockout-tagout",
+      "expected_section_heading": "Requirements of the Standard > What must an energy-control procedure include?",
+      "expected_answer": "A statement on how to use the procedures; specific steps to shut down, isolate, block, and secure machines; steps for safe placement/removal/transfer of lockout/tagout devices and who is responsible for them; and requirements for testing to verify the effectiveness of lockout/tagout devices and other energy-control measures.",
+      "notes": "Straightforward lookup."
+    },
+    {
+      "id": "q002",
+      "question": "What is the definition of 'lockout' as used in OSHA's lockout/tagout standard?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0018"
+      ],
+      "expected_document_id": "osha-3120-lockout-tagout",
+      "expected_section_heading": "Commonly Used Terms",
+      "expected_answer": "The placement of a lockout device on an energy-isolating device, per an established procedure, ensuring the energy-isolating device and controlled equipment cannot be operated until the lockout device is removed.",
+      "notes": "Straightforward lookup, glossary-style chunk."
+    },
+    {
+      "id": "q003",
+      "question": "What are the six sequential steps a worker must complete before beginning service or maintenance under a lockout/tagout program?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0009"
+      ],
+      "expected_document_id": "osha-3120-lockout-tagout",
+      "expected_section_heading": "Requirements of the Standard > What must workers do before they begin service or maintenance activities?; What must workers do before they remove their lockout or tagout device and reenergize the machine?",
+      "expected_answer": "Prepare for shutdown; shut down the machine; disconnect or isolate it from energy source(s); apply the lockout/tagout device(s); release/restrain/render safe all stored or residual energy; verify isolation and deenergization.",
+      "notes": "Section-specific lookup requiring the right sub-question within a merged FAQ-style chunk."
+    },
+    {
+      "id": "q004",
+      "question": "What is the difference between a fixed guard and an interlocking barrier guard on a machine?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0012"
+      ],
+      "expected_document_id": "osha-3170-machine-guarding",
+      "expected_section_heading": "Controlling Amputation Hazards > Guards",
+      "expected_answer": "A fixed guard is a permanent barrier that allows stock feeding but blocks the danger area and usually requires guard removal for adjustment/repair; an interlocking barrier guard shuts off or disengages power and prevents machine start-up when the guard is open, allowing some access for minor servicing without full guard removal.",
+      "notes": "Requires reading a comparison table, not just a single sentence."
+    },
+    {
+      "id": "q005",
+      "question": "What are presence-sensing safeguarding devices and how do they protect machine operators?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0013"
+      ],
+      "expected_document_id": "osha-3170-machine-guarding",
+      "expected_section_heading": "Controlling Amputation Hazards > Safeguarding Devices",
+      "expected_answer": "Devices that interlock into the machine's control system to stop operation when a sensing field (photoelectric, radio frequency, or electromagnetic) is disturbed; they adjust to different stock sizes and allow access for loading/unloading and maintenance, but only work on machines that can stop the cycle before the operator reaches the danger area.",
+      "notes": "Straightforward lookup."
+    },
+    {
+      "id": "q006",
+      "question": "What minimum protective shade number is required for shielded metal arc welding on plate less than 3 inches thick?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0010"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "Eye and Face Protection > Welding Operations",
+      "expected_answer": "Shade 7.",
+      "notes": "Requires reading a specific row of a data table."
+    },
+    {
+      "id": "q007",
+      "question": "At what noise level and duration does OSHA require hearing protection for employees?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0030"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "Hearing Protection",
+      "expected_answer": "Employees may be exposed to 90 dB for 8 hours/day before protection is required; at 115 dB, protection is required if exposure exceeds 15 minutes (see Table 5 for the full permissible-exposure schedule).",
+      "notes": "Straightforward lookup."
+    },
+    {
+      "id": "q008",
+      "question": "What minimum load must an anchorage point support for a personal fall arrest system?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0032"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "Personal Fall Protection Systems",
+      "expected_answer": "At least 5,000 pounds for each employee attached.",
+      "notes": "Straightforward lookup."
+    },
+    {
+      "id": "q009",
+      "question": "¿Qué es la cavitación en una bomba centrífuga y qué la causa?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0006"
+      ],
+      "expected_document_id": "doe-hdbk-1018-1-pumps",
+      "expected_section_heading": "Centrifugal Pump Operation > Cavitation",
+      "expected_answer": "Cavitation is the formation and collapse of vapor bubbles at the impeller eye when local pressure drops below the fluid's saturation pressure; the bubbles collapse in a higher-pressure region and can pit and destroy the impeller and damage bearings/seals.",
+      "notes": "Spanish query against an English-only corpus — bilingual retrieval validation."
+    },
+    {
+      "id": "q010",
+      "question": "¿Cuál es la diferencia entre la altura neta de succión positiva disponible (NPSHA) y la requerida (NPSHR)?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0007"
+      ],
+      "expected_document_id": "doe-hdbk-1018-1-pumps",
+      "expected_section_heading": "Centrifugal Pump Operation > Net Positive Suction Head",
+      "expected_answer": "NPSHA is the actual difference between suction pressure and the liquid's saturation pressure; NPSHR is the minimum NPSH necessary to avoid cavitation. Cavitation is avoided when NPSHA >= NPSHR.",
+      "notes": "Spanish query, bilingual retrieval validation; technical/formula-heavy chunk."
+    },
+    {
+      "id": "q011",
+      "question": "Why are gate valves not used to regulate or throttle flow?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0005"
+      ],
+      "expected_document_id": "doe-hdbk-1018-2-valves",
+      "expected_section_heading": "Types of Valves > Gate Valves",
+      "expected_answer": "Because the flow path opens in a highly nonlinear way relative to percent-open, and a partially open disk tends to vibrate, with most flow change and high-velocity wear occurring near shutoff.",
+      "notes": "Straightforward lookup."
+    },
+    {
+      "id": "q012",
+      "question": "¿Cuál es la diferencia entre una válvula de alivio (relief valve) y una válvula de seguridad (safety valve)?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0014"
+      ],
+      "expected_document_id": "doe-hdbk-1018-2-valves",
+      "expected_section_heading": "Types of Valves > Relief and Safety Valves",
+      "expected_answer": "A relief valve gradually opens as pressure rises above setpoint and is typically used on incompressible fluids; a safety valve pops rapidly to full open at its pressure setting and stays open until pressure drops below a lower reset pressure, and is typically used on compressible fluids like steam.",
+      "notes": "Spanish query, bilingual retrieval validation."
+    },
+    {
+      "id": "q013",
+      "question": "Under 21 CFR 211.22, what authority does the quality control unit have over drug product components and production records?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0004"
+      ],
+      "expected_document_id": "cfr-21-part-211-cgmp",
+      "expected_section_heading": "Subpart B—Organization and Personnel > § 211.22 Responsibilities of quality control unit",
+      "expected_answer": "The authority to approve or reject all components, drug product containers, closures, in-process materials, packaging material, labeling, and drug products, and to review production records for errors.",
+      "notes": "Direct regulatory citation lookup."
+    },
+    {
+      "id": "q014",
+      "question": "Según 21 CFR 211.137, ¿en qué debe basarse la fecha de caducidad de un producto farmacéutico?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0024"
+      ],
+      "expected_document_id": "cfr-21-part-211-cgmp",
+      "expected_section_heading": "Subpart G—Packaging and Labeling Control > § 211.137 Expiration dating",
+      "expected_answer": "On appropriate stability testing described in section 211.166, and related to any storage conditions stated on the labeling as determined by stability studies.",
+      "notes": "Spanish query, bilingual retrieval validation; regulatory citation."
+    },
+    {
+      "id": "q015",
+      "question": "What six pieces of information must appear on the label of a shipped container of a hazardous chemical under the Hazard Communication Standard?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0008"
+      ],
+      "expected_document_id": "cfr-29-1910-1200-hazcom",
+      "expected_section_heading": "(f) Labels and other forms of warning",
+      "expected_answer": "Product identifier; signal word; hazard statement(s); pictogram(s); precautionary statement(s); and the name, address, and telephone number of the manufacturer, importer, or other responsible party.",
+      "notes": "Straightforward lookup with a specific enumerated list."
+    },
+    {
+      "id": "q016",
+      "question": "¿Cuáles son las 16 secciones numeradas que debe incluir una hoja de datos de seguridad (SDS) según 29 CFR 1910.1200?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0009"
+      ],
+      "expected_document_id": "cfr-29-1910-1200-hazcom",
+      "expected_section_heading": "(g) Safety data sheets",
+      "expected_answer": "Identification; Hazard(s) identification; Composition/information on ingredients; First-aid measures; Fire-fighting measures; Accidental release measures; Handling and storage; Exposure controls/personal protection; Physical and chemical properties; Stability and reactivity; Toxicological information; Ecological information; Disposal considerations; Transport information; Regulatory information; Other information.",
+      "notes": "Spanish query, bilingual retrieval validation; long enumerated-list chunk."
+    },
+    {
+      "id": "q017",
+      "question": "What is the OSHA permissible exposure limit (PEL) for acetone?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0010"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Acetone",
+      "expected_answer": "TWA 1000 ppm (2400 mg/m^3).",
+      "notes": "Straightforward lookup, structured data-sheet chunk."
+    },
+    {
+      "id": "q018",
+      "question": "¿Cuál es la concentración inmediatamente peligrosa para la vida o la salud (IDLH) del monóxido de carbono?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0018"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Carbon monoxide",
+      "expected_answer": "1200 ppm.",
+      "notes": "Spanish query, bilingual retrieval validation; structured data-sheet chunk."
+    },
+    {
+      "id": "q019",
+      "question": "What is the first troubleshooting step to check when an XJ-450 conveyor belt is mistracking?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "manual-xj450-belt-conveyor::chunk-0006"
+      ],
+      "expected_document_id": "manual-xj450-belt-conveyor",
+      "expected_section_heading": "5. Belt Tracking Troubleshooting",
+      "expected_answer": "Confirm frame level — a frame out of level by more than 3 mm/m causes persistent mistracking that pulley adjustment alone cannot fix.",
+      "notes": "Straightforward lookup, synthetic-document numbered procedure."
+    },
+    {
+      "id": "q020",
+      "question": "How often should the XJ-450 conveyor's drive and tail pulley bearings be lubricated, and what else is checked during the monthly inspection?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "manual-xj450-belt-conveyor::chunk-0004"
+      ],
+      "expected_document_id": "manual-xj450-belt-conveyor",
+      "expected_section_heading": "3. Preventive Maintenance Schedule > 3.1 Daily (operator-level) checks; 3.2 Monthly (maintenance technician) checks; 3.3 Annual (or 4,000 operating-hour) overhaul",
+      "expected_answer": "Monthly, per the lubrication schedule; the monthly check also covers belt splice condition, take-up assembly travel, idler roller freedom of rotation, and drive pulley shaft coupling bolt torque (85 N·m).",
+      "notes": "Section-specific — requires distinguishing monthly from daily/annual items in a merged chunk."
+    },
+    {
+      "id": "q021",
+      "question": "During a CNC mill tooling changeover, who must verify entered tool offset values before proceeding?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-mnt-022-cnc-mill-changeover::chunk-0006"
+      ],
+      "expected_document_id": "sop-mnt-022-cnc-mill-changeover",
+      "expected_section_heading": "5. Procedure > 5.1 Machine shutdown and tool removal; 5.2 Incoming tooling and fixture installation; 5.3 Work coordinate system zeroing; 5.4 First-off part run and verification",
+      "expected_answer": "A second person (the setup technician or operator, whichever did not perform the entry) must verbally confirm each entered tool offset value against the tool list — a mandatory second-check, not optional.",
+      "notes": "Section-specific, requires locating one numbered step within a long procedure chunk."
+    },
+    {
+      "id": "q022",
+      "question": "Under SOP-QA-008's supplier skip-lot program, what happens if a supplier on skip-lot status has a lot rejected?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-008-incoming-inspection::chunk-0007"
+      ],
+      "expected_document_id": "sop-qa-008-incoming-inspection",
+      "expected_section_heading": "6. Supplier Skip-Lot Program",
+      "expected_answer": "The supplier/part combination immediately returns to full lot-by-lot inspection for a minimum of 10 subsequent lots.",
+      "notes": "Straightforward lookup."
+    },
+    {
+      "id": "q023",
+      "question": "What are the five disposition options for nonconforming material under SOP-QA-014?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-014-nonconforming-material::chunk-0007"
+      ],
+      "expected_document_id": "sop-qa-014-nonconforming-material",
+      "expected_section_heading": "4. Procedure > 4.3 Disposition options",
+      "expected_answer": "Use-As-Is, Rework, Repair, Return-to-Supplier, and Scrap.",
+      "notes": "Straightforward lookup, enumerated list."
+    },
+    {
+      "id": "q024",
+      "question": "What was the root cause of the belt mistracking issue on work order WO-30142?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cmms-work-orders-line3-q2::chunk-0003"
+      ],
+      "expected_document_id": "cmms-work-orders-line3-q2",
+      "expected_section_heading": "Work Order Log > WO-30142",
+      "expected_answer": "The tail pulley take-up assembly was near the end of its travel, and the conveyor frame was found out of level by about 4 mm/m following a recent line relocation.",
+      "notes": "Requires matching a specific work-order ID within a CMMS export document."
+    },
+    {
+      "id": "q025",
+      "question": "What happens when a diode is forward biased?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1011-1-motors::chunk-0007"
+      ],
+      "expected_document_id": "doe-hdbk-1011-1-motors",
+      "expected_section_heading": "DC Sources > Rectifiers > Forward Bias",
+      "expected_answer": "The source's positive terminal is connected to the anode and negative to the cathode; holes and electrons are driven toward the p-n junction and combine there, producing electron flow through the circuit.",
+      "notes": "Despite the document_id containing 'motors', this content is DC circuit theory, not motor theory — legitimately answerable from this chunk regardless."
+    },
+    {
+      "id": "q026",
+      "question": "¿Puede un empleador quedar exento de los requisitos de bloqueo/etiquetado (lockout/tagout) si utiliza métodos de resguardo de máquinas?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0021"
+      ],
+      "expected_document_id": "osha-3170-machine-guarding",
+      "expected_section_heading": "Controlling Amputation Hazards > Lockout/Tagout",
+      "expected_answer": "Sí — un empleador puede evitar los requisitos de LOTO si el método de resguardo elimina la exposición del empleado al área de peligro de la máquina durante el servicio o mantenimiento, usando los métodos de resguardo de 29 CFR 1910, Subpart O.",
+      "notes": "Spanish query, bilingual retrieval validation; cross-references the LOTO standard from within the machine-guarding document."
+    },
+    {
+      "id": "q027",
+      "question": "What in-process tests does 21 CFR 211.110 require manufacturers to consider for tablet or capsule production?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0019"
+      ],
+      "expected_document_id": "cfr-21-part-211-cgmp",
+      "expected_section_heading": "Subpart F—Production and Process Controls > § 211.110 Sampling and testing of in-process materials and drug products",
+      "expected_answer": "Tablet or capsule weight variation, disintegration time, adequacy of mixing for uniformity/homogeneity, dissolution time and rate, clarity/completeness/pH of solutions, and bioburden testing.",
+      "notes": "Regulatory citation, enumerated list."
+    },
+    {
+      "id": "q028",
+      "question": "How are reciprocating positive-displacement pumps classified?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0011"
+      ],
+      "expected_document_id": "doe-hdbk-1018-1-pumps",
+      "expected_section_heading": "Positive Displacement Pumps > Principle of Operation; Reciprocating Pumps",
+      "expected_answer": "Four ways: direct-acting vs. indirect-acting, simplex vs. duplex, single-acting vs. double-acting, and power pumps (rotary motion converted to reciprocating motion via gearing/crankshaft).",
+      "notes": "Requires synthesizing a four-part enumerated classification."
+    },
+    {
+      "id": "q029",
+      "question": "Which type of chemical-resistant glove is recommended for protection against chlorinated solvents like trichloroethylene?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0023"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "Hand and Arm Protection > Chemical- and Liquid-Resistant Gloves",
+      "expected_answer": "Nitrile gloves.",
+      "notes": "Requires picking the right glove type out of several described in the same chunk."
+    },
+    {
+      "id": "q030",
+      "question": "When is a first article inspection required under SOP-QA-008?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-008-incoming-inspection::chunk-0006"
+      ],
+      "expected_document_id": "sop-qa-008-incoming-inspection",
+      "expected_section_heading": "5. First Article Inspection",
+      "expected_answer": "For a new part number, a new supplier for an existing part number, or a part number returning to production after a design change affecting form/fit/function.",
+      "notes": "Straightforward lookup."
+    },
+    {
+      "id": "q031",
+      "question": "What are the qualitative and quantitative respirator fit-testing protocols required before an employee is assigned a respirator?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "The NIOSH excerpt explains which respirator class/filter series to use (N/R/P mnemonic) but never describes fit-testing methodology (29 CFR 1910.134) — not present anywhere in this corpus."
+    },
+    {
+      "id": "q032",
+      "question": "What confined space entry permit requirements apply before workers enter a below-grade tank at this facility?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "29 CFR 1910.146 confined space entry is never covered by any document in this corpus."
+    },
+    {
+      "id": "q033",
+      "question": "What arc-flash-rated PPE is required for a technician performing live diagnostics on a 480V switchgear panel?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "doe-hdbk-1011-1-motors covers only basic DC circuit theory, not electrical safe-work practices or NFPA 70E; no document in this corpus covers arc-flash PPE."
+    },
+    {
+      "id": "q034",
+      "question": "What certification and training does OSHA require before an employee can operate a powered industrial truck (forklift)?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "29 CFR 1910.178 is never covered by any document in this corpus."
+    },
+    {
+      "id": "q035",
+      "question": "What does this facility's bloodborne pathogens exposure control plan require after a needlestick or sharps injury?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "29 CFR 1910.1030 bloodborne pathogens is never covered by any document in this corpus."
+    },
+    {
+      "id": "q036",
+      "question": "How often must portable fire extinguishers be inspected, and what training must employees receive before using one?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "29 CFR 1910.157 portable fire extinguishers is never covered by any document in this corpus."
+    },
+    {
+      "id": "q037",
+      "question": "What specific guarding requirements does OSHA recommend for mechanical power presses?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "Verified omission: osha-3170-machine-guarding::chunk-0021's scope note states the per-machine-type catalog (13 types, including mechanical power presses) was retrieved but explicitly omitted from this corpus for length."
+    },
+    {
+      "id": "q038",
+      "question": "Per OSHA's PPE standards directory (Appendix A), which specific 29 CFR standards require the employer to provide PPE to construction workers at no cost?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "Verified omission: osha-3151-ppe::chunk-0032's scope note states Appendix A (the full standards directory) was retrieved but explicitly omitted from this corpus for length."
+    },
+    {
+      "id": "q039",
+      "question": "Why won't a three-phase AC induction motor start, even though it hums when power is applied?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "Trap question: despite its document_id containing 'motors', doe-hdbk-1011-1-motors covers only DC theory (sources, circuit terminology, circuit faults) — no AC motor content exists anywhere in this corpus."
+    },
+    {
+      "id": "q040",
+      "question": "What are the audiometric testing frequency and baseline requirements under OSHA's comprehensive hearing conservation program?",
+      "language": "en",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "Verified omission: osha-3151-ppe::chunk-0030 explicitly points to OSHA Publication 3074 and 29 CFR 1910.95(c) for the comprehensive program's details rather than reproducing them."
+    }
+  ]
+}

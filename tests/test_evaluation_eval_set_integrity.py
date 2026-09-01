@@ -28,15 +28,15 @@ def test_hash_is_sensitive_to_content_changes():
     assert compute_hash(tampered) != data["sha256"]
 
 
-def test_eval_set_has_forty_items_with_declared_split():
+def test_eval_set_split_counts():
     data = load_eval_set()
     questions = data["questions"]
-    assert len(questions) == 40
+    assert len(questions) == 105
 
     answerable = [q for q in questions if q["answerable"]]
     unanswerable = [q for q in questions if not q["answerable"]]
-    assert len(answerable) == 30
-    assert len(unanswerable) == 10
+    assert len(answerable) == 80
+    assert len(unanswerable) == 25
 
 
 def test_every_answerable_question_has_expected_chunk_ids_that_exist():
@@ -65,5 +65,21 @@ def test_no_duplicate_question_ids():
 def test_spanish_questions_present_for_bilingual_validation():
     data = load_eval_set()
     spanish = [q for q in data["questions"] if q["language"] == "es"]
-    assert 6 <= len(spanish) <= 8
-    assert all(q["answerable"] for q in spanish), "Spanish subset is drawn from the answerable set"
+    spanish_answerable = [q for q in spanish if q["answerable"]]
+    spanish_unanswerable = [q for q in spanish if not q["answerable"]]
+    assert len(spanish_answerable) >= 25
+    assert len(spanish_unanswerable) >= 15
+
+
+def test_every_new_spanish_answerable_has_english_counterpart():
+    data = load_eval_set()
+    english_expected_chunk_sets = [
+        set(q["expected_chunk_ids"]) for q in data["questions"] if q["answerable"] and q["language"] == "en"
+    ]
+    for question in data["questions"]:
+        if question["language"] != "es" or not question["answerable"] or question["id"] < "q041":
+            continue
+        expected = set(question["expected_chunk_ids"])
+        assert expected in english_expected_chunk_sets, (
+            f"{question['id']}: no English answerable question shares its expected_chunk_ids {sorted(expected)}"
+        )

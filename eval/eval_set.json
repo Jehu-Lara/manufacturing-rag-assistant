@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "sha256": "69f76a6b7223a9cbe7fb78423d29d748a7cc28483f6c66fef271e251cccfb2e0",
+  "version": "1.1.0",
+  "sha256": "d846b3dc25f4bae6ba749ff5005d72e8199735c0b637c5b4fe8eb65ee54bee8c",
   "questions": [
     {
       "id": "q001",
@@ -501,6 +501,821 @@
       "expected_section_heading": null,
       "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
       "notes": "Verified omission: osha-3151-ppe::chunk-0030 explicitly points to OSHA Publication 3074 and 29 CFR 1910.95(c) for the comprehensive program's details rather than reproducing them."
+    },
+    {
+      "id": "q041",
+      "question": "¿Qué es el NPSHR y cómo se relaciona con el NPSHA?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0007"
+      ],
+      "expected_document_id": "doe-hdbk-1018-1-pumps",
+      "expected_section_heading": "Centrifugal Pump Operation > Net Positive Suction Head",
+      "expected_answer": "El NPSHR (net positive suction head required) es la carga neta positiva de succión mínima necesaria para evitar la cavitación; el NPSHA es la diferencia entre la presión en la succión de la bomba y la presión de saturación del líquido. Para evitar cavitación debe cumplirse NPSHA ≥ NPSHR.",
+      "notes": "v1.1.0 bilingual pair — pumps / NPSH acronym pair; en counterpart q042."
+    },
+    {
+      "id": "q042",
+      "question": "What is NPSHR and how does it relate to NPSHA?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0007"
+      ],
+      "expected_document_id": "doe-hdbk-1018-1-pumps",
+      "expected_section_heading": "Centrifugal Pump Operation > Net Positive Suction Head",
+      "expected_answer": "NPSHR (net positive suction head required) is the minimum net positive suction head necessary to avoid cavitation; NPSHA is the difference between the pressure at the pump suction and the liquid's saturation pressure. Cavitation is avoided when NPSHA >= NPSHR.",
+      "notes": "v1.1.0 bilingual pair — pumps / NPSH acronym pair; en counterpart of q041."
+    },
+    {
+      "id": "q043",
+      "question": "¿Qué cambios aumentan el NPSH disponible para detener la cavitación?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0008"
+      ],
+      "expected_document_id": "doe-hdbk-1018-1-pumps",
+      "expected_section_heading": "Centrifugal Pump Operation > Preventing Cavitation",
+      "expected_answer": "Aumentar la presión en la succión de la bomba (subir el nivel de líquido en un tanque cerrado o aumentar la presión sobre el líquido), disminuir la temperatura del líquido bombeado (lo que baja su presión de saturación) y reducir las pérdidas de carga en la tubería de succión (mayor diámetro, menos codos/válvulas/accesorios, tramo más corto).",
+      "notes": "v1.1.0 bilingual pair — pumps / NPSH acronym pair; en counterpart q044."
+    },
+    {
+      "id": "q044",
+      "question": "What changes increase the available NPSH to stop cavitation?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0008"
+      ],
+      "expected_document_id": "doe-hdbk-1018-1-pumps",
+      "expected_section_heading": "Centrifugal Pump Operation > Preventing Cavitation",
+      "expected_answer": "Increasing pressure at the pump suction (raising the liquid level in an enclosed tank or raising the pressure above the liquid), decreasing the temperature of the pumped liquid (which lowers its saturation pressure), and reducing head losses in the suction piping (larger pipe diameter, fewer elbows/valves/fittings, shorter pipe run).",
+      "notes": "v1.1.0 bilingual pair — pumps / NPSH acronym pair; en counterpart of q043."
+    },
+    {
+      "id": "q045",
+      "question": "¿Sirve una válvula de bola para estrangular el flujo?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0007"
+      ],
+      "expected_document_id": "doe-hdbk-1018-2-valves",
+      "expected_section_heading": "Types of Valves > Ball Valves",
+      "expected_answer": "No. Las válvulas de bola convencionales tienen características de estrangulamiento relativamente pobres, porque el asiento parcialmente expuesto se erosiona con rapidez bajo el flujo de alta velocidad del estrangulamiento; están pensadas para servicio de apertura/cierre con un giro de 90°.",
+      "notes": "v1.1.0 bilingual pair — valves; en counterpart q046."
+    },
+    {
+      "id": "q046",
+      "question": "Is a ball valve suitable for throttling flow?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0007"
+      ],
+      "expected_document_id": "doe-hdbk-1018-2-valves",
+      "expected_section_heading": "Types of Valves > Ball Valves",
+      "expected_answer": "No. Conventional ball valves have relatively poor throttling characteristics because the partially exposed seat erodes rapidly under high-velocity throttling flow; they are intended for quick-acting 90-degree open/shut service.",
+      "notes": "v1.1.0 bilingual pair — valves; en counterpart of q045."
+    },
+    {
+      "id": "q047",
+      "question": "¿Cuáles son los tipos generales de válvulas de retención (check)?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0013"
+      ],
+      "expected_document_id": "doe-hdbk-1018-2-valves",
+      "expected_section_heading": "Types of Valves > Needle Valves; Check Valves",
+      "expected_answer": "De bisagra (swing), de disco basculante (tilting-disk), de elevación (lift), de pistón, de mariposa y de retención con cierre (stop check). Todas se accionan por el propio fluido: el flujo directo abre la válvula y la inversión la cierra.",
+      "notes": "v1.1.0 bilingual pair — valves; en counterpart q048."
+    },
+    {
+      "id": "q048",
+      "question": "What are the general types of check valves?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0013"
+      ],
+      "expected_document_id": "doe-hdbk-1018-2-valves",
+      "expected_section_heading": "Types of Valves > Needle Valves; Check Valves",
+      "expected_answer": "Swing, tilting-disk, lift, piston, butterfly, and stop check valves. All are activated by the flowing fluid itself: forward flow opens the valve and reversal closes it.",
+      "notes": "v1.1.0 bilingual pair — valves; en counterpart of q047."
+    },
+    {
+      "id": "q049",
+      "question": "¿Cada cuánto hay que revisar los procedimientos de LOTO?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0016"
+      ],
+      "expected_document_id": "osha-3120-lockout-tagout",
+      "expected_section_heading": "Requirements of the Standard > What if a shift changes during machine service or maintenance?; How often do I need to review my lockout/tagout procedures?; What does a review entail?",
+      "expected_answer": "Al menos una vez al año, y el empleador debe corregir cualquier desviación o insuficiencia detectada en el procedimiento de control de energía o en su aplicación. La inspección periódica debe realizarla una persona autorizada que no participe en el uso del procedimiento inspeccionado, y el empleador debe certificarla.",
+      "notes": "v1.1.0 bilingual pair — LOTO acronym; en counterpart q050."
+    },
+    {
+      "id": "q050",
+      "question": "How often must LOTO procedures be reviewed?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0016"
+      ],
+      "expected_document_id": "osha-3120-lockout-tagout",
+      "expected_section_heading": "Requirements of the Standard > What if a shift changes during machine service or maintenance?; How often do I need to review my lockout/tagout procedures?; What does a review entail?",
+      "expected_answer": "At least once a year, and the employer must correct any deviations or inadequacies found in the energy-control procedure or its application. The periodic inspection must be performed by an authorized person not involved in using the procedure being inspected, and the employer must certify it.",
+      "notes": "v1.1.0 bilingual pair — LOTO acronym; en counterpart of q049."
+    },
+    {
+      "id": "q051",
+      "question": "¿Por qué OSHA considera que los dispositivos de bloqueo son más seguros que las etiquetas de advertencia?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0012"
+      ],
+      "expected_document_id": "osha-3120-lockout-tagout",
+      "expected_section_heading": "Requirements of the Standard > What are the limitations of tagout devices?; What are the requirements for lockout/tagout devices?",
+      "expected_answer": "Porque una etiqueta es solo un aviso: no ofrece la restricción física de un candado y puede generar una falsa sensación de seguridad. Por eso OSHA considera los dispositivos de bloqueo más seguros y eficaces para proteger a los empleados de la energía peligrosa.",
+      "notes": "v1.1.0 bilingual pair — LOTO / fully-spelled phrasing; en counterpart q052."
+    },
+    {
+      "id": "q052",
+      "question": "Why does OSHA consider lockout devices more secure than tagout devices?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0012"
+      ],
+      "expected_document_id": "osha-3120-lockout-tagout",
+      "expected_section_heading": "Requirements of the Standard > What are the limitations of tagout devices?; What are the requirements for lockout/tagout devices?",
+      "expected_answer": "Because a tag is only a warning: it does not provide the physical restraint of a lock and may evoke a false sense of security. For those reasons OSHA considers lockout devices more secure and more effective at protecting employees from hazardous energy.",
+      "notes": "v1.1.0 bilingual pair — LOTO / fully-spelled phrasing; en counterpart of q051."
+    },
+    {
+      "id": "q053",
+      "question": "¿Qué criterios debe cumplir un resguardo de máquina?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0011"
+      ],
+      "expected_document_id": "osha-3170-machine-guarding",
+      "expected_section_heading": "Controlling Amputation Hazards > Primary Safeguarding Methods",
+      "expected_answer": "Impedir el contacto del empleado con la zona de peligro durante la operación de la máquina; no crear peligros adicionales; ser seguro, resistente a manipulaciones y duradero; no interferir con la operación normal de la máquina; y permitir la lubricación y el mantenimiento seguros.",
+      "notes": "v1.1.0 bilingual pair — machine guarding; en counterpart q054."
+    },
+    {
+      "id": "q054",
+      "question": "What criteria must a machine safeguard meet?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0011"
+      ],
+      "expected_document_id": "osha-3170-machine-guarding",
+      "expected_section_heading": "Controlling Amputation Hazards > Primary Safeguarding Methods",
+      "expected_answer": "Prevent employee contact with the hazard area during machine operation; avoid creating additional hazards; be secure, tamper-resistant, and durable; avoid interfering with normal operation of the machine; and allow for safe lubrication and maintenance.",
+      "notes": "v1.1.0 bilingual pair — machine guarding; en counterpart of q053."
+    },
+    {
+      "id": "q055",
+      "question": "¿Qué tipos de dispositivos de concientización (awareness devices) existen para máquinas?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0017"
+      ],
+      "expected_document_id": "osha-3170-machine-guarding",
+      "expected_section_heading": "Controlling Amputation Hazards > Awareness Devices",
+      "expected_answer": "Barreras de concientización, que permiten el acceso a la zona de peligro pero contactan al empleado para hacerle notar que está cerca del punto peligroso; señales de concientización, mediante avisos audibles o visuales reconocibles; y letreros de concientización, que informan la naturaleza del peligro y dan instrucciones e información de capacitación. La norma OSHA 1910.145 fija las especificaciones de diseño, aplicación y uso de estos letreros y etiquetas.",
+      "notes": "v1.1.0 bilingual pair — machine guarding; en counterpart q056."
+    },
+    {
+      "id": "q056",
+      "question": "What types of awareness devices exist for machines?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0017"
+      ],
+      "expected_document_id": "osha-3170-machine-guarding",
+      "expected_section_heading": "Controlling Amputation Hazards > Awareness Devices",
+      "expected_answer": "Awareness barriers, which allow access to the danger area but contact the employee to create awareness of being close to the danger point; awareness signals, using recognizable audible or visual signals; and awareness signs, which state the nature of the hazard and give instructions and training information. OSHA standard 1910.145 gives the design, application, and use specifications for those signs and tags.",
+      "notes": "v1.1.0 bilingual pair — machine guarding; en counterpart of q055."
+    },
+    {
+      "id": "q057",
+      "question": "¿Qué debe incluir la certificación escrita de la evaluación de riesgos para seleccionar PPE?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0004"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "The Hazard Assessment",
+      "expected_answer": "La identificación del lugar de trabajo evaluado, el nombre de la persona que realizó la evaluación, la fecha de la evaluación y la identificación del documento que certifica que la evaluación de riesgos se completó.",
+      "notes": "v1.1.0 bilingual pair — PPE acronym; en counterpart q058."
+    },
+    {
+      "id": "q058",
+      "question": "What must the written certification of the PPE hazard assessment include?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0004"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "The Hazard Assessment",
+      "expected_answer": "Identification of the workplace evaluated, the name of the person conducting the assessment, the date of the assessment, and identification of the document certifying completion of the hazard assessment.",
+      "notes": "v1.1.0 bilingual pair — PPE acronym; en counterpart of q057."
+    },
+    {
+      "id": "q059",
+      "question": "¿Qué clase de casco protege contra alto voltaje?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0015"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "Head Protection > Types of Hard Hats",
+      "expected_answer": "Los cascos Clase B, que dan el mayor nivel de protección contra riesgos eléctricos, con protección contra descarga y quemadura de alto voltaje hasta 20,000 voltios, además de protección contra impacto y penetración. Los Clase A solo protegen hasta 2,200 voltios y los Clase C no ofrecen ninguna protección eléctrica.",
+      "notes": "v1.1.0 bilingual pair — PPE / terse phrasing; en counterpart q060."
+    },
+    {
+      "id": "q060",
+      "question": "Which hard hat class protects against high voltage?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0015"
+      ],
+      "expected_document_id": "osha-3151-ppe",
+      "expected_section_heading": "Head Protection > Types of Hard Hats",
+      "expected_answer": "Class B hard hats, which provide the highest level of protection against electrical hazards, with high-voltage shock and burn protection up to 20,000 volts, plus impact and penetration protection. Class A only offers limited voltage protection up to 2,200 volts, and Class C offers no electrical protection at all.",
+      "notes": "v1.1.0 bilingual pair — PPE / terse phrasing; en counterpart of q059."
+    },
+    {
+      "id": "q061",
+      "question": "¿Cómo genera voltaje un termopar?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1011-1-motors::chunk-0005"
+      ],
+      "expected_document_id": "doe-hdbk-1011-1-motors",
+      "expected_section_heading": "DC Sources > Thermocouples",
+      "expected_answer": "Un termopar une dos metales distintos en una unión. Al calentarse la unión, los electrones de uno de los metales ganan energía suficiente para liberarse y migrar a través de la unión hacia el otro metal; ese desplazamiento de electrones produce un voltaje en los terminales del termopar. Combinaciones típicas son hierro-constantán, cobre-constantán, antimonio-bismuto y cromel-alumel.",
+      "notes": "v1.1.0 bilingual pair — DC theory; en counterpart q062."
+    },
+    {
+      "id": "q062",
+      "question": "How does a thermocouple generate voltage?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1011-1-motors::chunk-0005"
+      ],
+      "expected_document_id": "doe-hdbk-1011-1-motors",
+      "expected_section_heading": "DC Sources > Thermocouples",
+      "expected_answer": "A thermocouple joins two different metals at a junction. As the junction is heated, electrons in one of the metals gain enough energy to become free and migrate across the junction into the other metal; that displacement of electrons produces a voltage across the thermocouple's terminals. Typical combinations are iron/constantan, copper/constantan, antimony/bismuth, and chromel/alumel.",
+      "notes": "v1.1.0 bilingual pair — DC theory; en counterpart of q061."
+    },
+    {
+      "id": "q063",
+      "question": "¿Por qué los circuitos en paralelo son más propensos que los circuitos en serie a sufrir cortocircuitos dañinos?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1011-1-motors::chunk-0017"
+      ],
+      "expected_document_id": "doe-hdbk-1011-1-motors",
+      "expected_section_heading": "DC Circuit Faults > Open Circuit (Series); Open Circuit (Parallel); Short Circuit (Series); Short Circuit (Parallel); Summary",
+      "expected_answer": "Porque cada carga está conectada directamente a través de la fuente de alimentación: si una de ellas se pone en corto, la resistencia entre los terminales de la fuente es prácticamente cero. En cambio, si se pone en corto una carga en serie, la resistencia de las demás cargas impide que la resistencia del circuito caiga a cero.",
+      "notes": "v1.1.0 bilingual pair — DC theory / fully-spelled phrasing; en counterpart q064."
+    },
+    {
+      "id": "q064",
+      "question": "Why are parallel circuits more likely than series circuits to develop damaging short circuits?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1011-1-motors::chunk-0017"
+      ],
+      "expected_document_id": "doe-hdbk-1011-1-motors",
+      "expected_section_heading": "DC Circuit Faults > Open Circuit (Series); Open Circuit (Parallel); Short Circuit (Series); Short Circuit (Parallel); Summary",
+      "expected_answer": "Because each load is connected directly across the power source: if any load becomes shorted, the resistance between the power source terminals is practically zero. If a series load becomes shorted, by contrast, the resistance of the other loads keeps the circuit resistance from dropping to zero.",
+      "notes": "v1.1.0 bilingual pair — DC theory / fully-spelled phrasing; en counterpart of q063."
+    },
+    {
+      "id": "q065",
+      "question": "¿Cuál es el PEL de OSHA para el tolueno?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0015"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Toluene",
+      "expected_answer": "TWA 200 ppm, con techo (C) de 300 ppm y un pico máximo de 500 ppm durante 10 minutos.",
+      "notes": "v1.1.0 bilingual pair — NIOSH / PEL acronym; en counterpart q066."
+    },
+    {
+      "id": "q066",
+      "question": "What is the OSHA PEL for toluene?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0015"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Toluene",
+      "expected_answer": "TWA 200 ppm, with a ceiling of 300 ppm and a 500 ppm 10-minute maximum peak.",
+      "notes": "v1.1.0 bilingual pair — NIOSH / PEL acronym; en counterpart of q065."
+    },
+    {
+      "id": "q067",
+      "question": "¿Cuál es el IDLH del metanol?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0012"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Methanol (Methyl alcohol)",
+      "expected_answer": "6000 ppm.",
+      "notes": "v1.1.0 bilingual pair — NIOSH / IDLH acronym, terse phrasing; en counterpart q068."
+    },
+    {
+      "id": "q068",
+      "question": "What is the IDLH for methanol?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0012"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Methanol (Methyl alcohol)",
+      "expected_answer": "6000 ppm.",
+      "notes": "v1.1.0 bilingual pair — NIOSH / IDLH acronym, terse phrasing; en counterpart of q067."
+    },
+    {
+      "id": "q069",
+      "question": "¿Cuál es el REL TWA de NIOSH para el alcohol isopropílico?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0011"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Isopropyl alcohol (2-Propanol)",
+      "expected_answer": "TWA 400 ppm (980 mg/m³), con un límite de corta duración (ST) de 500 ppm (1225 mg/m³).",
+      "notes": "v1.1.0 bilingual pair — NIOSH / REL + TWA acronyms; en counterpart q070."
+    },
+    {
+      "id": "q070",
+      "question": "What is the NIOSH REL TWA for isopropyl alcohol?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0011"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "Isopropyl alcohol (2-Propanol)",
+      "expected_answer": "TWA 400 ppm (980 mg/m^3), with a short-term limit (ST) of 500 ppm (1225 mg/m^3).",
+      "notes": "v1.1.0 bilingual pair — NIOSH / REL + TWA acronyms; en counterpart of q069."
+    },
+    {
+      "id": "q071",
+      "question": "¿Qué significa LEL en la guía de bolsillo de NIOSH?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0007"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "How to Use This Guide > Field Definitions",
+      "expected_answer": "LEL es el límite explosivo (inflamable) inferior en aire, expresado en % por volumen. Además, la notación «10%LEL» en el campo IDLH indica que el IDLH se fijó en el 10% de ese límite explosivo inferior por consideraciones de seguridad, aunque los datos toxicológicos indicaran efectos irreversibles solo a concentraciones más altas.",
+      "notes": "v1.1.0 bilingual pair — NIOSH / LEL acronym; en counterpart q072."
+    },
+    {
+      "id": "q072",
+      "question": "What does LEL mean in the NIOSH Pocket Guide?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "niosh-pocket-guide-excerpt::chunk-0007"
+      ],
+      "expected_document_id": "niosh-pocket-guide-excerpt",
+      "expected_section_heading": "How to Use This Guide > Field Definitions",
+      "expected_answer": "LEL is the lower explosive (flammable) limit in air, expressed as % by volume. In addition, the notation \"10%LEL\" in the IDLH field means the IDLH was based on 10% of that lower explosive limit for safety considerations, even though the toxicological data indicated irreversible effects only at higher concentrations.",
+      "notes": "v1.1.0 bilingual pair — NIOSH / LEL acronym; en counterpart of q071."
+    },
+    {
+      "id": "q073",
+      "question": "¿Con qué frecuencia debe darse la capacitación en CGMP al personal de fabricación?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0005"
+      ],
+      "expected_document_id": "cfr-21-part-211-cgmp",
+      "expected_section_heading": "Subpart B—Organization and Personnel > § 211.25 Personnel qualifications",
+      "expected_answer": "De forma continua y con la frecuencia suficiente para asegurar que los empleados se mantengan familiarizados con los requisitos de CGMP que les aplican; además, debe impartirla personal calificado.",
+      "notes": "v1.1.0 bilingual pair — 21 CFR 211 / CGMP acronym; en counterpart q074."
+    },
+    {
+      "id": "q074",
+      "question": "How often must manufacturing personnel receive CGMP training?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0005"
+      ],
+      "expected_document_id": "cfr-21-part-211-cgmp",
+      "expected_section_heading": "Subpart B—Organization and Personnel > § 211.25 Personnel qualifications",
+      "expected_answer": "On a continuing basis and with sufficient frequency to assure that employees remain familiar with the CGMP requirements applicable to them; it must also be conducted by qualified individuals.",
+      "notes": "v1.1.0 bilingual pair — 21 CFR 211 / CGMP acronym; en counterpart of q073."
+    },
+    {
+      "id": "q075",
+      "question": "¿Qué exige 21 CFR 211.72 sobre los filtros usados en productos inyectables?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0014"
+      ],
+      "expected_document_id": "cfr-21-part-211-cgmp",
+      "expected_section_heading": "Subpart D—Equipment > § 211.72 Filters",
+      "expected_answer": "Los filtros para filtración de líquidos en inyectables de uso humano no deben liberar fibras. Si es imprescindible usar un filtro que libera fibras, después debe usarse un filtro adicional que no libere fibras con un tamaño de poro nominal máximo de 0.2 micras (0.45 micras si las condiciones de fabricación lo exigen). El uso de filtros que contengan asbesto está prohibido.",
+      "notes": "v1.1.0 bilingual pair — 21 CFR 211; en counterpart q076."
+    },
+    {
+      "id": "q076",
+      "question": "What does 21 CFR 211.72 require of filters used for injectable drug products?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0014"
+      ],
+      "expected_document_id": "cfr-21-part-211-cgmp",
+      "expected_section_heading": "Subpart D—Equipment > § 211.72 Filters",
+      "expected_answer": "Filters for liquid filtration of injectable drug products for human use must not release fibers. If a fiber-releasing filter is necessary, an additional non-fiber-releasing filter with a maximum nominal pore size of 0.2 micron (0.45 micron if manufacturing conditions dictate) must be used afterward. Asbestos-containing filters are prohibited.",
+      "notes": "v1.1.0 bilingual pair — 21 CFR 211; en counterpart of q075."
+    },
+    {
+      "id": "q077",
+      "question": "¿Dónde deben mantenerse las SDS para que los trabajadores puedan consultarlas?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0010"
+      ],
+      "expected_document_id": "cfr-29-1910-1200-hazcom",
+      "expected_section_heading": "(g) Safety data sheets",
+      "expected_answer": "El empleador debe mantener copias en el lugar de trabajo, accesibles de inmediato a los empleados en sus áreas de trabajo durante cada turno. Se permite el acceso electrónico u otras alternativas siempre que no creen una barrera de acceso, y para empleados que se desplazan entre centros durante el turno las SDS pueden guardarse en la instalación principal siempre que puedan obtener la información de inmediato en una emergencia.",
+      "notes": "v1.1.0 bilingual pair — hazcom / SDS acronym; en counterpart q078."
+    },
+    {
+      "id": "q078",
+      "question": "Where must SDSs be kept so that workers can consult them?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0010"
+      ],
+      "expected_document_id": "cfr-29-1910-1200-hazcom",
+      "expected_section_heading": "(g) Safety data sheets",
+      "expected_answer": "The employer must keep copies in the workplace, readily accessible to employees in their work areas during each shift. Electronic or other alternative access is permitted as long as it creates no barrier to access, and for employees who travel between workplaces during a shift the SDSs may be kept at the primary facility provided they can immediately obtain the information in an emergency.",
+      "notes": "v1.1.0 bilingual pair — hazcom / SDS acronym; en counterpart of q077."
+    },
+    {
+      "id": "q079",
+      "question": "¿Qué debe cubrir como mínimo la capacitación en comunicación de peligros?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0011"
+      ],
+      "expected_document_id": "cfr-29-1910-1200-hazcom",
+      "expected_section_heading": "(h) Employee information and training",
+      "expected_answer": "Métodos y observaciones para detectar la presencia o liberación de un químico peligroso (monitoreo, dispositivos de monitoreo continuo, apariencia visual, olor, etc.); los peligros físicos, para la salud, de asfixia simple, de polvo combustible, de gas pirofórico y HNOC de los químicos del área de trabajo; las medidas de autoprotección, incluidas las prácticas de trabajo implantadas por el empleador, los procedimientos de emergencia y el PPE; y los detalles del programa de comunicación de peligros, incluidos los sistemas de etiquetado de contenedores enviados y del lugar de trabajo, y la estructura y el uso de las SDS.",
+      "notes": "v1.1.0 bilingual pair — hazcom; en counterpart q080."
+    },
+    {
+      "id": "q080",
+      "question": "What must hazard communication training cover at a minimum?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0011"
+      ],
+      "expected_document_id": "cfr-29-1910-1200-hazcom",
+      "expected_section_heading": "(h) Employee information and training",
+      "expected_answer": "Methods and observations for detecting the presence or release of a hazardous chemical (monitoring, continuous monitoring devices, visual appearance, odor, etc.); the physical, health, simple asphyxiation, combustible dust, pyrophoric gas, and HNOC hazards of the chemicals in the work area; self-protection measures, including employer-implemented work practices, emergency procedures, and PPE; and the details of the hazard communication program, including the shipped-container and workplace labeling systems and the structure and use of SDSs.",
+      "notes": "v1.1.0 bilingual pair — hazcom; en counterpart of q079."
+    },
+    {
+      "id": "q081",
+      "question": "¿Cuánta grasa lleva cada rodamiento de la polea motriz del XJ-450?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "manual-xj450-belt-conveyor::chunk-0005"
+      ],
+      "expected_document_id": "manual-xj450-belt-conveyor",
+      "expected_section_heading": "4. Lubrication Schedule",
+      "expected_answer": "15 g por rodamiento de grasa de complejo de litio NLGI Grado 2, con intervalo mensual. No se debe exceder esa cantidad: el exceso de grasa es una causa raíz común de falla prematura de sellos en el XJ-450.",
+      "notes": "v1.1.0 bilingual pair — synthetic: XJ-450 conveyor manual; en counterpart q082."
+    },
+    {
+      "id": "q082",
+      "question": "How much grease does each XJ-450 drive pulley bearing take?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "manual-xj450-belt-conveyor::chunk-0005"
+      ],
+      "expected_document_id": "manual-xj450-belt-conveyor",
+      "expected_section_heading": "4. Lubrication Schedule",
+      "expected_answer": "15 g per bearing of NLGI Grade 2 lithium complex grease, at a monthly interval. Do not exceed that quantity — over-greasing is a common root cause of premature seal failure on the XJ-450.",
+      "notes": "v1.1.0 bilingual pair — synthetic: XJ-450 conveyor manual; en counterpart of q081."
+    },
+    {
+      "id": "q083",
+      "question": "¿Qué se debe tener listo en la máquina antes de empezar un cambio de herramental en el fresado CNC?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-mnt-022-cnc-mill-changeover::chunk-0005"
+      ],
+      "expected_document_id": "sop-mnt-022-cnc-mill-changeover",
+      "expected_section_heading": "4. Prerequisites",
+      "expected_answer": "El viajero (traveler) del trabajo entrante, el plano en su última revisión y la lista de herramientas deben estar disponibles en la máquina antes de comenzar. Además, el herramental requerido debe haberse sacado del almacén de herramientas y verificado contra los números de parte de la lista de herramientas; no se debe iniciar el cambio con herramental incompleto — se prepara y se espera.",
+      "notes": "v1.1.0 bilingual pair — synthetic: SOP-MNT-022; en counterpart q084."
+    },
+    {
+      "id": "q084",
+      "question": "What must be ready at the machine before a CNC mill tooling changeover begins?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-mnt-022-cnc-mill-changeover::chunk-0005"
+      ],
+      "expected_document_id": "sop-mnt-022-cnc-mill-changeover",
+      "expected_section_heading": "4. Prerequisites",
+      "expected_answer": "The incoming job's traveler, the latest-revision print, and the tool list must be available at the machine before the changeover begins. The required tooling must also have been pulled from the tool crib and verified against the tool list part numbers; do not begin the changeover with incomplete tooling — stage it and wait.",
+      "notes": "v1.1.0 bilingual pair — synthetic: SOP-MNT-022; en counterpart of q083."
+    },
+    {
+      "id": "q085",
+      "question": "¿Qué plan de muestreo se usa para la inspección de material entrante y por cuánto tiempo se conservan los registros?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-008-incoming-inspection::chunk-0005"
+      ],
+      "expected_document_id": "sop-qa-008-incoming-inspection",
+      "expected_section_heading": "4. Procedure > 4.1 Receipt and identification; 4.2 Sampling and inspection; 4.3 Disposition; 4.4 Records",
+      "expected_answer": "El tamaño de muestra se determina según el plan de muestreo de la planta, basado en ANSI/ASQ Z1.4 nivel general de inspección II, salvo que el plan de inspección específico de la parte indique otra cosa. Los resultados de inspección se registran en la bitácora de inspección de entrada y se conservan un mínimo de 3 años, o según el requisito de retención de registros del contrato del cliente aplicable, el que sea mayor.",
+      "notes": "v1.1.0 bilingual pair — synthetic: SOP-QA-008; en counterpart q086."
+    },
+    {
+      "id": "q086",
+      "question": "What sampling plan is used for incoming material inspection, and how long are the records retained?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-008-incoming-inspection::chunk-0005"
+      ],
+      "expected_document_id": "sop-qa-008-incoming-inspection",
+      "expected_section_heading": "4. Procedure > 4.1 Receipt and identification; 4.2 Sampling and inspection; 4.3 Disposition; 4.4 Records",
+      "expected_answer": "Sample size is determined per the facility's sampling plan, based on ANSI/ASQ Z1.4 general inspection level II unless the part-specific inspection plan specifies otherwise. Inspection results are recorded in the incoming inspection log and retained for a minimum of 3 years, or per the applicable customer contract's record retention requirement, whichever is longer.",
+      "notes": "v1.1.0 bilingual pair — synthetic: SOP-QA-008; en counterpart of q085."
+    },
+    {
+      "id": "q087",
+      "question": "¿En cuánto tiempo hay que abrir un reporte de no conformidad (NCR) tras detectar material no conforme?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-014-nonconforming-material::chunk-0005"
+      ],
+      "expected_document_id": "sop-qa-014-nonconforming-material",
+      "expected_section_heading": "4. Procedure > 4.1 Identification and segregation",
+      "expected_answer": "Dentro de un día hábil desde la identificación, documentando el número de parte, la cantidad afectada, la descripción de la no conformidad, dónde y cómo se descubrió, y la trazabilidad de lote/serie. Además, el empleado debe notificar a su supervisor y al departamento de calidad dentro del mismo turno.",
+      "notes": "v1.1.0 bilingual pair — synthetic: SOP-QA-014; en counterpart q088."
+    },
+    {
+      "id": "q088",
+      "question": "How soon must a nonconformance report (NCR) be opened after nonconforming material is found?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-014-nonconforming-material::chunk-0005"
+      ],
+      "expected_document_id": "sop-qa-014-nonconforming-material",
+      "expected_section_heading": "4. Procedure > 4.1 Identification and segregation",
+      "expected_answer": "Within one business day of identification, documenting the part number, quantity affected, nonconformance description, where and how it was discovered, and the lot/serial traceability. The employee must also notify their supervisor and the quality department within the same shift.",
+      "notes": "v1.1.0 bilingual pair — synthetic: SOP-QA-014; en counterpart of q087."
+    },
+    {
+      "id": "q089",
+      "question": "¿Cuál fue el diagnóstico de la orden de trabajo WO-30215 en la fresadora MILL-202?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cmms-work-orders-line3-q2::chunk-0006"
+      ],
+      "expected_document_id": "cmms-work-orders-line3-q2",
+      "expected_section_heading": "Work Order Log > WO-30215",
+      "expected_answer": "Se ingresó un offset de longitud de herramienta incorrecto durante el cambio de herramental: se capturaron los dígitos transpuestos 124.5 mm en lugar de los 142.5 mm de la lista de herramientas. Se corrigió el offset, se volvió a correr la primera pieza y quedó dentro de tolerancia.",
+      "notes": "v1.1.0 bilingual pair — synthetic: CMMS work-order export; en counterpart q090."
+    },
+    {
+      "id": "q090",
+      "question": "What was the diagnosis on work order WO-30215 for the MILL-202 mill?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cmms-work-orders-line3-q2::chunk-0006"
+      ],
+      "expected_document_id": "cmms-work-orders-line3-q2",
+      "expected_section_heading": "Work Order Log > WO-30215",
+      "expected_answer": "An incorrect tool length offset was entered during changeover: transposed digits, 124.5 mm entered instead of the 142.5 mm on the tool list. The offset was corrected and the first-off part was re-run and verified in tolerance.",
+      "notes": "v1.1.0 bilingual pair — synthetic: CMMS work-order export; en counterpart of q089."
+    },
+    {
+      "id": "q091",
+      "question": "¿Qué protocolos de prueba de ajuste (fit test) cualitativo y cuantitativo se requieren antes de asignar un respirador?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.134 respirator fit-testing methodology is not in this corpus (es counterpart of q031)."
+    },
+    {
+      "id": "q092",
+      "question": "¿Qué requisitos de permiso de entrada a espacios confinados aplican antes de entrar a un tanque enterrado?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.146 confined space entry is never covered by any document in this corpus (es counterpart of q032)."
+    },
+    {
+      "id": "q093",
+      "question": "¿Qué PPE con clasificación de arco eléctrico se necesita para trabajar en un tablero de 480 V energizado?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — No document in this corpus covers arc-flash PPE or NFPA 70E; doe-hdbk-1011-1-motors covers only basic DC theory (es counterpart of q033)."
+    },
+    {
+      "id": "q094",
+      "question": "¿Qué certificación y capacitación exige OSHA para operar un montacargas?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.178 powered industrial trucks is never covered by any document in this corpus (es counterpart of q034)."
+    },
+    {
+      "id": "q095",
+      "question": "¿Qué debe hacerse tras un pinchazo con aguja según el plan de control de exposición a patógenos transmitidos por sangre?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.1030 bloodborne pathogens is never covered by any document in this corpus (es counterpart of q035)."
+    },
+    {
+      "id": "q096",
+      "question": "¿Con qué frecuencia deben inspeccionarse los extintores portátiles?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.157 portable fire extinguishers is never covered by any document in this corpus (es counterpart of q036)."
+    },
+    {
+      "id": "q097",
+      "question": "¿Qué requisitos específicos de resguardo recomienda OSHA para las prensas mecánicas de potencia?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — Verified omission: osha-3170-machine-guarding::chunk-0021's scope note states the per-machine-type catalog (including mechanical power presses) was retrieved but explicitly omitted from this corpus for length (es counterpart of q037)."
+    },
+    {
+      "id": "q098",
+      "question": "¿Por qué un motor trifásico de inducción zumba pero no arranca?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — Trap question: despite its document_id containing 'motors', doe-hdbk-1011-1-motors covers only DC theory — no AC motor content exists anywhere in this corpus (es counterpart of q039)."
+    },
+    {
+      "id": "q099",
+      "question": "¿Cuáles son los requisitos de frecuencia y línea base de las pruebas audiométricas en un programa de conservación auditiva?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — Verified omission: osha-3151-ppe::chunk-0030 points to OSHA Publication 3074 and 29 CFR 1910.95(c) rather than reproducing the comprehensive program's details (es counterpart of q040)."
+    },
+    {
+      "id": "q100",
+      "question": "¿Qué caudal de extracción localizada se requiere para la ventilación de humos de soldadura?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.252 welding ventilation airflow rates are not in this corpus; niosh-pocket-guide-excerpt::chunk-0014 covers welding fumes as a substance but gives no ventilation rates."
+    },
+    {
+      "id": "q101",
+      "question": "¿Cómo se calcula la capacidad de una eslinga y con qué frecuencia debe inspeccionarse el aparejo de una grúa?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.184 slings and crane rigging inspection are never covered by any document in this corpus."
+    },
+    {
+      "id": "q102",
+      "question": "¿Qué pasos define la norma ISO 12100 para la evaluación de riesgos de maquinaria?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — ISO 12100 machinery risk assessment is never covered by any document in this corpus; osha-3170-machine-guarding cites ANSI/OSHA consensus standards but not ISO 12100."
+    },
+    {
+      "id": "q103",
+      "question": "¿Qué requisitos de armado e inspección aplican a los andamios en esta planta?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1926.451 scaffolding is never covered by any document in this corpus."
+    },
+    {
+      "id": "q104",
+      "question": "¿Qué exige la norma de gestión de la seguridad de procesos (PSM) para químicos altamente peligrosos?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — 29 CFR 1910.119 process safety management is never covered by any document in this corpus."
+    },
+    {
+      "id": "q105",
+      "question": "¿Qué requisitos aplican a las duchas de emergencia y lavaojos en las áreas donde se manejan solventes?",
+      "language": "es",
+      "answerable": false,
+      "expected_chunk_ids": [],
+      "expected_document_id": null,
+      "expected_section_heading": null,
+      "expected_answer": "Not answerable from this corpus — the correct system behavior is to decline rather than guess.",
+      "notes": "v1.1.0 Spanish unanswerable — ANSI Z358.1 / 29 CFR 1910.151(c) emergency shower and eyewash requirements are not in this corpus; niosh-pocket-guide-excerpt::chunk-0008 mentions eyewash only inside a respirator/first-aid field definition, not as a facility requirement."
     }
   ]
 }

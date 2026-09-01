@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from src.features.evaluation.threshold_analysis import select_threshold, sweep_thresholds
+from src.features.evaluation.threshold_analysis import (
+    build_report,
+    select_threshold,
+    sweep_thresholds,
+)
 
 
 def test_sweep_thresholds_covers_range_inclusive_of_endpoints():
@@ -55,6 +59,56 @@ def test_overlap_branch_tie_breaks_toward_lowest_threshold():
     assert len(tied_thresholds) > 1, "fixture must actually produce a tie to test tie-breaking"
     assert result["threshold"] == min(tied_thresholds)
     assert result["threshold"] == pytest.approx(0.20)
+
+
+def test_build_report_pooled_selection_is_unchanged_and_still_present():
+    # Synthetic fake eval set (v9.9.9): pooled scores + parallel language tags.
+    unanswerable_scores = [0.18, 0.26, 0.20, 0.28]
+    answerable_scores = [0.30, 0.42, 0.33, 0.45]
+    unanswerable_languages = ["en", "en", "es", "es"]
+    answerable_languages = ["en", "en", "es", "es"]
+
+    selection = select_threshold(unanswerable_scores, answerable_scores)
+    report = build_report(
+        unanswerable_scores,
+        answerable_scores,
+        unanswerable_languages,
+        answerable_languages,
+        selection,
+        "9.9.9",
+    )
+
+    assert "## Selection procedure and result" in report
+    assert (
+        "**Analyzer-selected threshold on this eval set (diagnostic only — NOT applied; "
+        f"production REFUSAL_COSINE_THRESHOLD stays 0.5999): {selection['threshold']:.4f}**"
+    ) in report
+
+
+def test_build_report_includes_per_language_sweep_sections():
+    unanswerable_scores = [0.18, 0.26, 0.20, 0.28]
+    answerable_scores = [0.30, 0.42, 0.33, 0.45]
+    unanswerable_languages = ["en", "en", "es", "es"]
+    answerable_languages = ["en", "en", "es", "es"]
+
+    selection = select_threshold(unanswerable_scores, answerable_scores)
+    report = build_report(
+        unanswerable_scores,
+        answerable_scores,
+        unanswerable_languages,
+        answerable_languages,
+        selection,
+        "9.9.9",
+    )
+
+    assert "## English — answerable/unanswerable top-1 semantic_score" in report
+    assert "## English — cutoff sweep" in report
+    assert "## Spanish — answerable/unanswerable top-1 semantic_score" in report
+    assert "## Spanish — cutoff sweep" in report
+    assert (
+        "Per-language tables are diagnostic; the shipped threshold remains the "
+        "pooled selection (0.5999 override, SPEC.md Phase 3)." in report
+    )
 
 
 def test_select_threshold_rejects_empty_score_lists():

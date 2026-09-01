@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional, Sequence
 
 from src.domain.models import Citation, RetrievalResult
@@ -8,6 +9,56 @@ from src.domain.models import Citation, RetrievalResult
 logger = logging.getLogger(__name__)
 
 RRF_K = 60
+
+# Domain acronym glossary. Curated 2026-08-30 by scanning corpus/ for all-caps
+# tokens by frequency, then looking up each term's expansion.
+#   expansions[0] = English expansion — MUST appear verbatim (case-insensitive)
+#                   somewhere in corpus/ (test_glossary_english_expansions_are_corpus_attested).
+#   expansions[1] = standard Spanish technical rendering — curated, NOT in the
+#                   English-only corpus; a plant worker's likely surface form.
+GLOSSARY: dict[str, tuple[str, ...]] = {
+    "NPSHA": ("net positive suction head available", "altura neta de succión positiva disponible"),
+    "NPSHR": ("net positive suction head required", "altura neta de succión positiva requerida"),
+    "NPSH": ("net positive suction head", "altura neta de succión positiva"),
+    "PEL": ("permissible exposure limit", "límite de exposición permisible"),
+    "IDLH": (
+        "immediately dangerous to life and health",
+        "concentración inmediatamente peligrosa para la vida o la salud",
+    ),
+    "TWA": ("time-weighted average", "promedio ponderado en el tiempo"),
+    "REL": ("recommended exposure limit", "límite de exposición recomendado"),
+    "LEL": ("lower explosive limit", "límite inferior de explosividad"),
+    "SDS": ("safety data sheet", "hoja de datos de seguridad"),
+    "PPE": ("personal protective equipment", "equipo de protección personal"),
+    "LOTO": ("lockout/tagout", "bloqueo y etiquetado"),
+    "CGMP": ("current good manufacturing practice", "buenas prácticas de manufactura vigentes"),
+}
+
+# Longer keys first so the alternation matches "NPSHA" before "NPSH".
+_GLOSSARY_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in sorted(GLOSSARY, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def expand_query(query: str) -> str:
+    """Deterministic, corpus-derived acronym expansion applied to the retrieval
+    query only — the original query is still what the answer is generated from.
+    Returns `query` unchanged when no glossary key is present."""
+    matched = {m.group(1).upper() for m in _GLOSSARY_PATTERN.finditer(query)}
+    if not matched:
+        return query
+    lower_query = query.lower()
+    additions: list[str] = []
+    for key in GLOSSARY:
+        if key not in matched:
+            continue
+        for expansion in GLOSSARY[key]:
+            lowered = expansion.lower()
+            if lowered in lower_query or any(lowered == a.lower() for a in additions):
+                continue
+            additions.append(expansion)
+    return f"{query} {' '.join(additions)}" if additions else query
 
 
 def rrf_scores(ranked_chunk_ids: Sequence[str], k: int = RRF_K) -> dict[str, float]:

@@ -107,3 +107,50 @@ def test_hybrid_retriever_truncates_to_k():
     results = retriever.retrieve("some query", k=2)
 
     assert len(results) == 2
+
+
+class _SpyVectorStore(_StubVectorStore):
+    def query(self, text: str, top_n: int) -> list[tuple[str, float, dict[str, Any]]]:
+        self.last_query = text
+        return super().query(text, top_n)
+
+
+class _SpyLexicalIndex(_StubLexicalIndex):
+    def query(self, text: str, top_n: int) -> list[tuple[str, float]]:
+        self.last_query = text
+        return super().query(text, top_n)
+
+
+def _spies() -> tuple[_SpyVectorStore, _SpyLexicalIndex]:
+    md = {"c": {"document_id": "d"}}
+    vs = _SpyVectorStore(hits=[("c", 0.9, md["c"])], metadata_by_id=md)
+    lx = _SpyLexicalIndex(hits=[("c", 1.0)])
+    return vs, lx
+
+
+def test_expansion_mode_off_passes_original_to_both():
+    vs, lx = _spies()
+    HybridRetriever(vs, lx).retrieve("What is NPSHA?", k=1)
+    assert vs.last_query == "What is NPSHA?"
+    assert lx.last_query == "What is NPSHA?"
+
+
+def test_expansion_mode_semantic_expands_vector_only():
+    vs, lx = _spies()
+    HybridRetriever(vs, lx, expansion_mode="semantic").retrieve("What is NPSHA?", k=1)
+    assert "net positive suction head available" in vs.last_query
+    assert lx.last_query == "What is NPSHA?"
+
+
+def test_expansion_mode_lexical_expands_bm25_only():
+    vs, lx = _spies()
+    HybridRetriever(vs, lx, expansion_mode="lexical").retrieve("What is NPSHA?", k=1)
+    assert vs.last_query == "What is NPSHA?"
+    assert "net positive suction head available" in lx.last_query
+
+
+def test_expansion_mode_both_expands_both():
+    vs, lx = _spies()
+    HybridRetriever(vs, lx, expansion_mode="both").retrieve("What is NPSHA?", k=1)
+    assert "net positive suction head available" in vs.last_query
+    assert "net positive suction head available" in lx.last_query

@@ -4,24 +4,14 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, SentenceTransformersEmbedder
-from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
-from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
-from src.core.config import load_settings
-from src.domain.models import RetrievalResult
+from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME
+from src.domain.models import ExpansionMode, RetrievalResult
 from src.features.evaluation import eval_set_integrity, metrics
+from src.features.evaluation._eval_retriever import build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
 REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-
-
-def _build_retriever() -> HybridRetriever:
-    settings = load_settings()
-    embedder = SentenceTransformersEmbedder()
-    vector_store = ChromaVectorStore(persist_dir=settings.chroma_path, embedder=embedder)
-    lexical_index = Bm25LexicalIndex(persist_path=settings.bm25_path)
-    return HybridRetriever(vector_store, lexical_index)
 
 
 def _git_commit_hash() -> str:
@@ -64,6 +54,74 @@ def _format_result_line(result: RetrievalResult) -> str:
         f"semantic_rank={result.semantic_rank}, bm25_rank={result.bm25_rank}) — "
         f"{result.metadata.get('document_title', '')} / {result.metadata.get('section_heading', '')}"
     )
+
+
+def _id_suffix_number(question_id: str) -> int:
+    digits = "".join(ch for ch in question_id if ch.isdigit())
+    return int(digits) if digits else 0
+
+
+def _matched_pair_gap_section(
+    questions: list[dict[str, Any]],
+    answerable_rows: list[dict[str, Any]],
+) -> list[str]:
+    """en - es top-1 semantic-score gap for answerable questions paired by
+    set-equal `expected_chunk_ids` (ties broken by nearest id suffix). This is
+    the frozen matched-pair signal the per-language threshold discussion is
+    gated on — see the Phase 3 bilingual-refusal design doc."""
+    expected_by_id = {q["id"]: set(q["expected_chunk_ids"]) for q in questions}
+    score_by_id = {row["id"]: row["top1_semantic_score"] for row in answerable_rows}
+    en_rows = [row for row in answerable_rows if row["language"] == "en"]
+    es_rows = [row for row in answerable_rows if row["language"] == "es"]
+
+    pairs: list[dict[str, Any]] = []
+    used_es_ids: set[str] = set()
+    for en_row in en_rows:
+        en_expected = expected_by_id.get(en_row["id"], set())
+        candidates = [
+            es_row
+            for es_row in es_rows
+            if es_row["id"] not in used_es_ids and expected_by_id.get(es_row["id"], set()) == en_expected
+        ]
+        if not candidates:
+            continue
+        es_row = min(
+            candidates,
+            key=lambda c: abs(_id_suffix_number(c["id"]) - _id_suffix_number(en_row["id"])),
+        )
+        used_es_ids.add(es_row["id"])
+        pairs.append(
+            {
+                "en_id": en_row["id"],
+                "es_id": es_row["id"],
+                "en_score": score_by_id[en_row["id"]],
+                "es_score": score_by_id[es_row["id"]],
+                "gap": score_by_id[en_row["id"]] - score_by_id[es_row["id"]],
+            }
+        )
+
+    lines = ["## Matched-pair cosine gap (en − es)", ""]
+    if not pairs:
+        lines += ["_No en/es answerable pairs share `expected_chunk_ids`._", ""]
+        return lines
+
+    lines += [
+        (
+            "Answerable en/es questions paired by set-equal `expected_chunk_ids` "
+            "(ties broken by nearest id). Gap = en top-1 semantic score − es top-1 semantic score."
+        ),
+        "",
+        "| en id | es id | en top-1 semantic | es top-1 semantic | gap (en − es) |",
+        "|---|---|---|---|---|",
+    ]
+    for pair in pairs:
+        lines.append(
+            f"| {pair['en_id']} | {pair['es_id']} | {pair['en_score']:.4f} | "
+            f"{pair['es_score']:.4f} | {pair['gap']:+.4f} |"
+        )
+    mean_gap = sum(pair["gap"] for pair in pairs) / len(pairs)
+    lines += ["", f"- **Mean gap (en − es), n={len(pairs)}**: {mean_gap:+.4f}", ""]
+    return lines
 
 
 def build_report(
@@ -113,6 +171,7 @@ def build_report(
         "",
         *language_lines,
         "",
+        *_matched_pair_gap_section(questions, answerable_rows),
         "## Unanswerable Subset (n=%d) — Top-1 Score Distribution" % len(unanswerable_rows),
         "",
         f"- Fused score: {unanswerable_fused_summary}",
@@ -160,12 +219,12 @@ def build_report(
     return "\n".join(lines) + "\n"
 
 
-def run() -> Path:
+def run(expansion_mode: ExpansionMode = "off") -> Path:
     eval_set_integrity.verify()
     data = eval_set_integrity.load_eval_set()
     questions = data["questions"]
 
-    retriever = _build_retriever()
+    retriever = build_retriever(expansion_mode)
     answerable = [q for q in questions if q["answerable"]]
     unanswerable = [q for q in questions if not q["answerable"]]
 
@@ -175,8 +234,9 @@ def run() -> Path:
     report = build_report(questions, answerable_rows, unanswerable_rows, data["version"])
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = REPORT_DIR / f"retrieval_report_v{data['version']}.md"
-    report_path.write_text(report, encoding="utf-8")
+    suffix = "" if expansion_mode == "off" else f"__{expansion_mode}"
+    report_path = REPORT_DIR / f"retrieval_report_v{data['version']}{suffix}.md"
+    report_path.write_text(report, encoding="utf-8", newline="\n")
 
     recall_at_5 = sum(row["recall@5"] for row in answerable_rows) / len(answerable_rows)
     print(f"Recall@3: {sum(row['recall@3'] for row in answerable_rows) / len(answerable_rows):.3f}")
