@@ -77,6 +77,7 @@ def test_profile_all_grey_passes(tmp_path: Path) -> None:
     assert all(cell["grounded_review"] == 12 for cell in profile["cells"])
     assert b"\r\n" not in report_path.read_bytes()
     assert b"\r\n" not in (tmp_path / "gate_holdout_band_profile.json").read_bytes()
+    assert not report_path.read_bytes().endswith(b"\n\n")
 
 
 def test_profile_fails_when_a_cell_has_too_few_grey(tmp_path: Path) -> None:

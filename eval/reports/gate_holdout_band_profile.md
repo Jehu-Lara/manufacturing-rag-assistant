@@ -17,4 +17,3 @@
 - en/unanswerable: ['h025', 'h031', 'h041', 'h045']
 - es/answerable: ['h014', 'h020', 'h022']
 - es/unanswerable: ['h026', 'h028', 'h036', 'h038', 'h044']
-

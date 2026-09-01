@@ -116,7 +116,6 @@ def render_report(status: str, cells: list[CellProfile]) -> str:
     for cell in sorted(cells, key=lambda c: (c.language, not c.answerable)):
         klass = "answerable" if cell.answerable else "unanswerable"
         lines.append(f"- {cell.language}/{klass}: {cell.grey_ids or '(none)'}")
-    lines.append("")
     return "\n".join(lines) + "\n"
 
 
