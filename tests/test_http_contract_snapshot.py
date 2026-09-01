@@ -10,8 +10,31 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from tests.conftest import REQUIRES_BUILT_INDEX_REASON, built_retrieval_index_present
+
+pytestmark = pytest.mark.skipif(
+    not built_retrieval_index_present(), reason=REQUIRES_BUILT_INDEX_REASON
+)
+
 SNAPSHOT_PATH = Path(__file__).resolve().parent / "snapshots" / "http_contract_phase0.json"
 REQUEST_ID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
+
+# Phase 3 (ADR-009) adds these to POST /query, additively. The Phase 0
+# snapshot froze the legacy fields and their values, not the absence of
+# backward-compatible extensions; the snapshot file is NOT rewritten.
+PHASE3_ADDITIVE_KEYS = ("review_floor", "gate_band")
+
+
+def _project_legacy(response_json: dict) -> dict:
+    if not isinstance(response_json, dict):
+        return response_json
+    return {k: v for k, v in response_json.items() if k not in PHASE3_ADDITIVE_KEYS}
+
+
+def _project_case_legacy(case: dict) -> dict:
+    return {**case, "response_json": _project_legacy(case["response_json"])}
 
 
 def _mask_request_id(response_json: dict) -> dict:
@@ -225,11 +248,8 @@ def _new_app_query_unhandled_exception_500() -> dict:
     }
 
 
-def test_new_app_matches_phase0_snapshot() -> None:
-    """Phase 2 gate, still enforced post-cutover: src.main:app's POST /query
-    and GET /health JSON shapes stay byte-identical to the Phase 0 snapshot
-    captured from the (now-retired) old api.main:app."""
-    new_app_cases = [
+def _all_new_app_cases() -> list[dict]:
+    return [
         _new_app_health_normal(),
         _new_app_health_degraded(),
         _new_app_query_confident(),
@@ -237,5 +257,35 @@ def test_new_app_matches_phase0_snapshot() -> None:
         _new_app_query_generation_error(),
         _new_app_query_unhandled_exception_500(),
     ]
+
+
+def test_new_app_matches_phase0_snapshot_on_legacy_fields() -> None:
+    """Phase 2 gate, still enforced post-cutover: src.main:app's POST /query
+    and GET /health legacy JSON fields+values stay byte-identical to the
+    Phase 0 snapshot. Phase 3's additive keys are projected out first (ADR-009)
+    and checked in test_phase3_additive_fields below; the snapshot file itself
+    is never rewritten."""
+    new_app_cases = [_project_case_legacy(case) for case in _all_new_app_cases()]
     stored_cases = _load_snapshot()
     assert new_app_cases == stored_cases
+
+
+def test_phase3_additive_fields_present_on_query_and_absent_on_health() -> None:
+    cases = {case["case"]: case["response_json"] for case in _all_new_app_cases()}
+
+    for query_case in ("query_confident", "query_refused", "query_generation_error"):
+        body = cases[query_case]
+        assert set(PHASE3_ADDITIVE_KEYS) <= set(body), query_case
+        assert body["gate_band"] in ("hard_refuse", "grounded_review", "confident")
+        # default policy is binary -> review_floor is always null
+        assert body["review_floor"] is None
+
+    assert cases["query_confident"]["gate_band"] == "confident"
+    assert cases["query_refused"]["gate_band"] == "hard_refuse"
+
+    for health_case in ("health_normal", "health_degraded"):
+        assert not (set(PHASE3_ADDITIVE_KEYS) & set(cases[health_case]))
+
+    # decision_reason is internal only — it must never reach the HTTP body
+    for body in cases.values():
+        assert "decision_reason" not in body

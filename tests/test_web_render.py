@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.web.render import classify_response_state, format_citations
+from src.web.i18n import UI_LABELS
+from src.web.render import _gate_caption, classify_response_state, format_citations
 
 
 def test_classify_response_state_normal_answer():
@@ -71,3 +72,29 @@ def test_format_citations_multiple_entries_one_line_each():
 
 def test_format_citations_empty_list_returns_empty_string():
     assert format_citations([], "en") == ""
+
+
+def test_gate_caption_binary_hides_review_floor_shows_band():
+    labels = UI_LABELS["en"]
+    caption = _gate_caption(
+        labels,
+        {"confidence": 0.91, "threshold": 0.5999, "review_floor": None, "gate_band": "confident"},
+    )
+    assert "0.5999" in caption
+    assert labels["review_floor_label"] not in caption
+    assert "confident" in caption
+
+
+def test_gate_caption_grounded_shows_both_limits_and_band():
+    labels = UI_LABELS["en"]
+    caption = _gate_caption(
+        labels,
+        {
+            "confidence": 0.57,
+            "threshold": 0.5999,
+            "review_floor": 0.55,
+            "gate_band": "grounded_review",
+        },
+    )
+    assert labels["review_floor_label"] in caption
+    assert "grounded_review" in caption

@@ -14,6 +14,8 @@ _REQUIRED_UI_LABEL_KEYS = (
     "citations_heading",
     "confidence_label",
     "threshold_label",
+    "review_floor_label",
+    "gate_band_label",
     "refused_badge",
     "refused_heading",
     "error_badge",

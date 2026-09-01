@@ -4,8 +4,9 @@ import statistics
 from pathlib import Path
 from typing import Any
 
-from src.features.evaluation import eval_set_integrity, metrics
-from src.features.evaluation._eval_retriever import build_retriever
+from src.domain.models import ExpansionMode, IndexProfile
+from src.features.evaluation import artifacts, eval_set_integrity, metrics
+from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
 REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
@@ -241,12 +242,21 @@ def build_report(
     return "\n".join(lines) + "\n"
 
 
-def run() -> Path:
+def run(
+    expansion_mode: ExpansionMode = "off",
+    *,
+    index_profile: IndexProfile = "raw-v1",
+    write_canonical_alias: bool = False,
+) -> Path:
+    if write_canonical_alias:
+        artifacts.ensure_canonical_alias_allowed(index_profile, expansion_mode)
+
     eval_set_integrity.verify()
     data = eval_set_integrity.load_eval_set()
     questions = data["questions"]
 
-    retriever = build_retriever()
+    assert_live_index_profile(index_profile)
+    retriever = build_retriever(expansion_mode, expected_profile=index_profile)
     answerable = [q for q in questions if q["answerable"]]
     unanswerable = [q for q in questions if not q["answerable"]]
 
@@ -257,18 +267,26 @@ def run() -> Path:
 
     selection = select_threshold(unanswerable_scores, answerable_scores)
 
-    report = build_report(
+    version = data["version"]
+    header = artifacts.resolve_provenance(index_profile, expansion_mode)
+    report = header.render() + "\n\n" + build_report(
         unanswerable_scores,
         answerable_scores,
         unanswerable_languages,
         answerable_languages,
         selection,
-        data["version"],
+        version,
     )
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = REPORT_DIR / f"threshold_analysis_v{data['version']}.md"
+    report_path = REPORT_DIR / artifacts.artifact_filename(
+        "threshold_analysis", version, index_profile, expansion_mode, "md"
+    )
     report_path.write_text(report, encoding="utf-8", newline="\n")
+    if write_canonical_alias:
+        (REPORT_DIR / f"threshold_analysis_v{version}.md").write_text(
+            report, encoding="utf-8", newline="\n"
+        )
 
     print(
         "Analyzer-selected threshold (diagnostic only, NOT applied): "

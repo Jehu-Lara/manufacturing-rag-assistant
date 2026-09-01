@@ -41,13 +41,27 @@ jobs:
       - name: Type-check (mypy)
         run: mypy src
 
-      - name: Verify eval set integrity
-        run: python -m src.features.evaluation.eval_set_integrity --verify
+      - name: Verify frozen evaluation datasets
+        run: |
+          python -m src.features.evaluation.eval_set_integrity --verify
+          python -m src.features.evaluation.regression_set_integrity --verify
 
       - name: Build real corpus artifacts (chunks + retrieval index)
         run: |
           python -m src.features.ingestion.cli
           python -m src.features.retrieval.cli
 
+      - name: Verify contextual refusal score bands (r001/r002 in review band)
+        run: python -m src.features.evaluation.gate_score_guard
+
       - name: Run tests
         run: pytest -v
+
+      # LAST on purpose: guards the frozen 48-question Phase 3 holdout
+      # (eval/gate_holdout_v1.0.0.json, content-approved + frozen 2026-09-01).
+      # It was RED BY DESIGN while the holdout was an unfrozen draft — a green
+      # integrity check over an empty/draft holdout would be a false guarantee
+      # (ADR-009). Kept last so lint, mypy, the score guard and the full suite
+      # still run first.
+      - name: Verify Phase 3 gate holdout
+        run: python -m src.features.evaluation.gate_holdout_integrity --verify

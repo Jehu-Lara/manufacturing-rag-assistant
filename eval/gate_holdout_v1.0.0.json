@@ -1,0 +1,464 @@
+{
+  "version": "1.0.0",
+  "sha256": "f3950a6dd76e71fda6605d412fec95ae6c369fb0401a0265a9b6f2fd79c9f213",
+  "status": "frozen",
+  "_note": "Phase 3 gate holdout - frozen 2026-09-01 after owner content approval (wording, difficulty, intent, expected absence). 48 questions / 24 EN-ES pairs / 24 answerable / 24 unanswerable. sha256 is over the parsed `questions` only; contract in ADR-009. Operational rollback is REFUSAL_POLICY=binary, not editing this file.",
+  "questions": [
+    {
+      "id": "h001",
+      "pair_id": "hp01",
+      "question": "What details must the written sanitation procedures for a drug-manufacturing building specify?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0010"
+      ],
+      "expected_answer": "They must assign responsibility for sanitation and describe the cleaning schedules, methods, equipment, and materials in sufficient detail; the procedures must be followed."
+    },
+    {
+      "id": "h002",
+      "pair_id": "hp01",
+      "question": "¿Qué detalles deben especificar los procedimientos escritos de saneamiento de un edificio de fabricación de medicamentos?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0010"
+      ],
+      "expected_answer": "Deben asignar la responsabilidad del saneamiento y describir con suficiente detalle los programas, métodos, equipos y materiales de limpieza; además, deben seguirse."
+    },
+    {
+      "id": "h003",
+      "pair_id": "hp02",
+      "question": "When can a returned drug product avoid destruction if its earlier storage or shipping conditions cast doubt on its quality?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0033"
+      ],
+      "expected_answer": "It can avoid destruction only if examination, testing, or another investigation proves that it meets the appropriate standards of safety, identity, strength, quality, and purity."
+    },
+    {
+      "id": "h004",
+      "pair_id": "hp02",
+      "question": "¿Cuándo puede evitarse la destrucción de un medicamento devuelto si sus condiciones previas de almacenamiento o transporte ponen en duda su calidad?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-21-part-211-cgmp::chunk-0033"
+      ],
+      "expected_answer": "Solo puede evitarse si un examen, prueba u otra investigación demuestra que cumple las normas apropiadas de seguridad, identidad, potencia, calidad y pureza."
+    },
+    {
+      "id": "h005",
+      "pair_id": "hp03",
+      "question": "In a medical emergency, when must a treating physician or nurse receive a chemical identity or mixture percentage withheld as a trade secret?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0012"
+      ],
+      "expected_answer": "It must be disclosed immediately when the treating physician or nurse determines it is necessary for emergency or first-aid treatment, even before a written statement of need or confidentiality agreement is provided."
+    },
+    {
+      "id": "h006",
+      "pair_id": "hp03",
+      "question": "En una emergencia médica, ¿cuándo debe recibir el médico o enfermero tratante la identidad química o el porcentaje de mezcla retenido como secreto comercial?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cfr-29-1910-1200-hazcom::chunk-0012"
+      ],
+      "expected_answer": "Debe revelarse inmediatamente cuando el médico o enfermero determine que es necesario para el tratamiento de emergencia o primeros auxilios, aun antes de presentar una declaración escrita de necesidad o un acuerdo de confidencialidad."
+    },
+    {
+      "id": "h007",
+      "pair_id": "hp04",
+      "question": "How does the commutator in a simple DC generator keep the brush polarity constant while the armature rotates?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1011-1-motors::chunk-0004"
+      ],
+      "expected_answer": "After each half turn, the commutator reverses which segment contacts each brush, so the coil side connected to a given brush keeps cutting the magnetic field in the same direction. The brushes retain constant polarity and deliver pulsating DC."
+    },
+    {
+      "id": "h008",
+      "pair_id": "hp04",
+      "question": "¿Cómo mantiene el conmutador de un generador de CC simple la polaridad constante de las escobillas mientras gira la armadura?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1011-1-motors::chunk-0004"
+      ],
+      "expected_answer": "Después de cada media vuelta, el conmutador invierte qué segmento contacta cada escobilla, de modo que el lado de la bobina conectado a una escobilla sigue cortando el campo magnético en la misma dirección. Las escobillas conservan una polaridad constante y entregan CC pulsante."
+    },
+    {
+      "id": "h009",
+      "pair_id": "hp05",
+      "question": "What is gas binding in a centrifugal pump, and why does it stop the pump from moving liquid?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0009"
+      ],
+      "expected_answer": "Gas binding occurs when gas or vapor fills the casing until the impeller cannot contact enough liquid. The impeller then spins inside the gas bubble without forcing liquid through the pump."
+    },
+    {
+      "id": "h010",
+      "pair_id": "hp05",
+      "question": "¿Qué es el bloqueo por gas en una bomba centrífuga y por qué impide que la bomba mueva líquido?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0009"
+      ],
+      "expected_answer": "Ocurre cuando el gas o vapor llena la carcasa hasta que el impulsor no puede contactar suficiente líquido. El impulsor gira dentro de la burbuja de gas sin impulsar líquido a través de la bomba."
+    },
+    {
+      "id": "h011",
+      "pair_id": "hp06",
+      "question": "Why are rotary positive-displacement pumps operated at relatively low speed when close internal clearances are needed?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0012"
+      ],
+      "expected_answer": "Low speed helps preserve the close clearances that limit slippage from discharge back to suction and avoids erosive wear that would enlarge those clearances and reduce capacity over time."
+    },
+    {
+      "id": "h012",
+      "pair_id": "hp06",
+      "question": "En una bomba rotativa, ¿por qué se limita la velocidad para conservar las holguras internas y la capacidad?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-1-pumps::chunk-0012"
+      ],
+      "expected_answer": "La baja velocidad ayuda a conservar las holguras estrechas que limitan el deslizamiento de la descarga a la succión y evita el desgaste erosivo que aumentaría esas holguras y reduciría la capacidad con el tiempo."
+    },
+    {
+      "id": "h013",
+      "pair_id": "hp07",
+      "question": "For a spring-return pneumatic valve actuator, which valve motion does air pressure produce in the direct and reverse arrangements?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0015"
+      ],
+      "expected_answer": "In a direct-acting actuator, air pressure closes the valve and a spring opens it. In a reverse-acting actuator, air pressure opens the valve and a spring closes it."
+    },
+    {
+      "id": "h014",
+      "pair_id": "hp07",
+      "question": "En un actuador neumático de válvula con retorno por resorte, ¿qué movimiento produce la presión de aire en las configuraciones directa e inversa?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "doe-hdbk-1018-2-valves::chunk-0015"
+      ],
+      "expected_answer": "En el actuador de acción directa, la presión de aire cierra la válvula y un resorte la abre. En el de acción inversa, la presión de aire abre la válvula y un resorte la cierra."
+    },
+    {
+      "id": "h015",
+      "pair_id": "hp08",
+      "question": "During a shift change with lockout devices still installed, what must the incoming shift verify for itself?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0016"
+      ],
+      "expected_answer": "Incoming shift members must personally verify that the machinery remains effectively isolated and deenergized as protection is transferred from the outgoing shift."
+    },
+    {
+      "id": "h016",
+      "pair_id": "hp08",
+      "question": "Durante un cambio de turno con dispositivos de bloqueo aún instalados, ¿qué debe verificar por sí mismo el turno entrante?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3120-lockout-tagout::chunk-0016"
+      ],
+      "expected_answer": "Los integrantes del turno entrante deben verificar personalmente que la maquinaria siga efectivamente aislada y desenergizada durante la transferencia de protección desde el turno saliente."
+    },
+    {
+      "id": "h017",
+      "pair_id": "hp09",
+      "question": "Before an employee may perform work requiring PPE, what understanding and ability must the employer confirm?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0006"
+      ],
+      "expected_answer": "The employee must demonstrate understanding of the PPE training in a language they understand and the ability to wear and use the PPE properly."
+    },
+    {
+      "id": "h018",
+      "pair_id": "hp09",
+      "question": "Antes de que un empleado realice trabajo que requiere PPE, ¿qué comprensión y capacidad debe confirmar el empleador?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3151-ppe::chunk-0006"
+      ],
+      "expected_answer": "El empleado debe demostrar que comprende la capacitación sobre PPE en un idioma que entienda y que puede usar y portar correctamente el PPE."
+    },
+    {
+      "id": "h019",
+      "pair_id": "hp10",
+      "question": "What should a plant consult when designing preventive inspection, maintenance, and repair for safeguards?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0020"
+      ],
+      "expected_answer": "The program should be based on the manufacturer's recommendations, good engineering practice, and applicable OSHA provisions."
+    },
+    {
+      "id": "h020",
+      "pair_id": "hp10",
+      "question": "¿Qué tres bases debe usar un empleador para establecer un programa proactivo de mantenimiento de máquinas y resguardos?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "osha-3170-machine-guarding::chunk-0020"
+      ],
+      "expected_answer": "El programa debe basarse en las recomendaciones del fabricante, las buenas prácticas de ingeniería y las disposiciones aplicables de OSHA."
+    },
+    {
+      "id": "h021",
+      "pair_id": "hp11",
+      "question": "Which auto-populated maintenance task was corrected as not applicable in WO-30167, and what spindle-coupling torque was recorded?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cmms-work-orders-line3-q2::chunk-0004"
+      ],
+      "expected_answer": "The idler roller check was corrected as not applicable to the mill. The spindle-drive coupling bolts were checked at 85 N·m and were within specification, so no adjustment was needed."
+    },
+    {
+      "id": "h022",
+      "pair_id": "hp11",
+      "question": "¿Qué error de plantilla se corrigió en la WO-30167 de MILL-204 y qué valor de torque quedó registrado?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "cmms-work-orders-line3-q2::chunk-0004"
+      ],
+      "expected_answer": "La revisión del rodillo loco se corrigió como no aplicable a la fresadora. Los pernos del acoplamiento del accionamiento del husillo se verificaron a 85 N·m y estaban dentro de especificación, por lo que no se ajustaron."
+    },
+    {
+      "id": "h023",
+      "pair_id": "hp12",
+      "question": "If an NCR root-cause investigation identifies a systemic issue, does closing the NCR also close the corrective action?",
+      "language": "en",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-014-nonconforming-material::chunk-0008"
+      ],
+      "expected_answer": "No. A separate corrective action request must be opened under the facility procedure, and closing the NCR does not close that underlying corrective action."
+    },
+    {
+      "id": "h024",
+      "pair_id": "hp12",
+      "question": "Si la investigación de causa raíz de un NCR identifica un problema sistémico, ¿cerrar el NCR también cierra la acción correctiva?",
+      "language": "es",
+      "answerable": true,
+      "expected_chunk_ids": [
+        "sop-qa-014-nonconforming-material::chunk-0008"
+      ],
+      "expected_answer": "No. Debe abrirse por separado una solicitud de acción correctiva conforme al procedimiento de la planta, y cerrar el NCR no cierra esa acción correctiva subyacente."
+    },
+    {
+      "id": "h025",
+      "pair_id": "hp13",
+      "question": "Which exact VFD parameter values and firmware version must be installed during the XJ-450 annual overhaul?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The XJ-450 annual-overhaul section only requires a VFD parameter backup and firmware-version check; no required parameter values or firmware version are provided anywhere in the conveyor manual excerpt."
+    },
+    {
+      "id": "h026",
+      "pair_id": "hp13",
+      "question": "¿Qué valores exactos de parámetros del VFD y qué versión de firmware deben instalarse durante la revisión anual del XJ-450?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "La sección de revisión anual del XJ-450 solo exige respaldar los parámetros del VFD y revisar la versión de firmware; el extracto del manual no proporciona valores obligatorios ni una versión específica."
+    },
+    {
+      "id": "h027",
+      "pair_id": "hp14",
+      "question": "What belt-tension force in newtons is required after shortening and re-splicing an XJ-450 belt?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The XJ-450 manual tells technicians when to schedule belt shortening/re-splicing and how to adjust tracking, but it gives no belt-tension force or newton specification."
+    },
+    {
+      "id": "h028",
+      "pair_id": "hp14",
+      "question": "¿Qué fuerza de tensión en newtons se requiere después de acortar y volver a empalmar una banda XJ-450?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "El manual XJ-450 indica cuándo programar el acortamiento y reempalme y cómo ajustar el seguimiento, pero no da una fuerza de tensión ni una especificación en newtons."
+    },
+    {
+      "id": "h029",
+      "pair_id": "hp15",
+      "question": "What exact color must every authorized employee's personal lockout lock be?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The OSHA lockout/tagout booklet describes identification and standardization requirements for devices but does not mandate one exact color for every authorized employee's personal lock."
+    },
+    {
+      "id": "h030",
+      "pair_id": "hp15",
+      "question": "¿De qué color exacto debe ser el candado personal de bloqueo de cada empleado autorizado?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "El folleto de OSHA sobre bloqueo/etiquetado describe requisitos de identificación y estandarización de dispositivos, pero no impone un color exacto para el candado personal de cada empleado autorizado."
+    },
+    {
+      "id": "h031",
+      "pair_id": "hp16",
+      "question": "What minimum acetone breakthrough time, in minutes, must chemical-resistant gloves provide?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The PPE and NIOSH excerpts discuss chemical-resistant glove materials and acetone hazards, but they provide no product-specific minimum glove breakthrough time in minutes."
+    },
+    {
+      "id": "h032",
+      "pair_id": "hp16",
+      "question": "¿Qué tiempo mínimo de permeación, en minutos, deben proporcionar los guantes resistentes a la acetona?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "Los extractos de PPE y NIOSH tratan materiales de guantes resistentes y riesgos de la acetona, pero no proporcionan un tiempo mínimo de permeación específico del producto en minutos."
+    },
+    {
+      "id": "h033",
+      "pair_id": "hp17",
+      "question": "Within how many calendar days must a drug-product complaint investigation under 21 CFR 211.198 be completed?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The corpus excerpt for 21 CFR 211.198 describes complaint records, review, and investigation duties but states no fixed completion deadline in calendar days."
+    },
+    {
+      "id": "h034",
+      "pair_id": "hp17",
+      "question": "¿En cuántos días naturales debe completarse una investigación de queja de producto farmacéutico conforme a 21 CFR 211.198?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "El extracto del corpus de 21 CFR 211.198 describe registros, revisión y deberes de investigación de quejas, pero no establece un plazo fijo en días naturales."
+    },
+    {
+      "id": "h035",
+      "pair_id": "hp18",
+      "question": "What minimum font size must be used for every section of a safety data sheet under 29 CFR 1910.1200?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The Hazard Communication excerpt specifies SDS language, content, section order, access, and update duties but does not prescribe a minimum font size."
+    },
+    {
+      "id": "h036",
+      "pair_id": "hp18",
+      "question": "¿Qué tamaño mínimo de letra debe usarse en cada sección de una hoja de datos de seguridad conforme a 29 CFR 1910.1200?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "El extracto de comunicación de peligros especifica idioma, contenido, orden de secciones, acceso y actualización de la SDS, pero no prescribe un tamaño mínimo de letra."
+    },
+    {
+      "id": "h037",
+      "pair_id": "hp19",
+      "question": "After how many operating hours must the brushes in the simple DC generator be replaced?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The DOE electrical-science excerpt explains generator and commutator operation but contains no brush inspection or replacement interval."
+    },
+    {
+      "id": "h038",
+      "pair_id": "hp19",
+      "question": "¿Después de cuántas horas de operación deben reemplazarse las escobillas del generador de CC simple?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "El extracto de ciencia eléctrica del DOE explica el funcionamiento del generador y del conmutador, pero no incluye un intervalo de inspección o reemplazo de escobillas."
+    },
+    {
+      "id": "h039",
+      "pair_id": "hp20",
+      "question": "Which lubricating-oil grade and bearing lubrication interval are specified for the centrifugal pump?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The DOE pump excerpt covers pump principles, protection, cavitation, gas binding, and priming but gives no equipment-specific bearing lubricant grade or lubrication interval."
+    },
+    {
+      "id": "h040",
+      "pair_id": "hp20",
+      "question": "¿Qué grado de aceite lubricante y qué intervalo de lubricación de rodamientos se especifican para la bomba centrífuga?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "El extracto de bombas del DOE cubre principios, protección, cavitación, bloqueo por gas y cebado, pero no da un grado de lubricante ni un intervalo de lubricación de rodamientos específico."
+    },
+    {
+      "id": "h041",
+      "pair_id": "hp21",
+      "question": "What exact supply-air pressure in psi is required for the direct-acting pneumatic valve actuator?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "The valve handbook explains how direct-, reverse-, and duplex pneumatic actuators work but provides no model-specific supply-air pressure or psi setpoint."
+    },
+    {
+      "id": "h042",
+      "pair_id": "hp21",
+      "question": "¿Qué presión exacta de aire de suministro, en psi, requiere el actuador neumático de válvula de acción directa?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "El manual de válvulas explica cómo funcionan los actuadores neumáticos directos, inversos y dúplex, pero no proporciona una presión de suministro ni un punto de ajuste en psi específico de un modelo."
+    },
+    {
+      "id": "h043",
+      "pair_id": "hp22",
+      "question": "What spindle speed and duration are required for a warm-up cycle before the CNC mill tooling changeover?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "SOP-MNT-022 specifies prerequisites, shutdown, tooling, offsets, dry run, and first-off verification but contains no spindle warm-up cycle, speed, or duration."
+    },
+    {
+      "id": "h044",
+      "pair_id": "hp22",
+      "question": "¿Qué velocidad del husillo y qué duración se requieren para un ciclo de calentamiento antes del cambio de herramental de la fresadora CNC?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "SOP-MNT-022 especifica prerrequisitos, paro, herramental, offsets, corrida en seco y verificación de primera pieza, pero no contiene un ciclo de calentamiento del husillo, velocidad ni duración."
+    },
+    {
+      "id": "h045",
+      "pair_id": "hp23",
+      "question": "What numerical AQL value applies to Critical parts under the facility's ANSI/ASQ Z1.4 incoming-inspection plan?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "SOP-QA-008 references ANSI/ASQ Z1.4 general inspection level II and part-specific plans, but the corpus does not include a numerical AQL for the Critical classification."
+    },
+    {
+      "id": "h046",
+      "pair_id": "hp23",
+      "question": "¿Qué valor numérico de AQL se aplica a las piezas Critical en el plan de inspección de recibo ANSI/ASQ Z1.4 de la planta?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "SOP-QA-008 hace referencia a ANSI/ASQ Z1.4 nivel general de inspección II y a planes específicos por pieza, pero el corpus no incluye un AQL numérico para la clasificación Critical."
+    },
+    {
+      "id": "h047",
+      "pair_id": "hp24",
+      "question": "On which weekday and at what time does the material review board meet to decide NCR dispositions?",
+      "language": "en",
+      "answerable": false,
+      "absence_note": "SOP-QA-014 defines MRB responsibilities, evaluation, disposition, closure, and records but provides no recurring meeting weekday or time."
+    },
+    {
+      "id": "h048",
+      "pair_id": "hp24",
+      "question": "¿Qué día de la semana y a qué hora se reúne la junta de revisión de materiales para decidir las disposiciones de los NCR?",
+      "language": "es",
+      "answerable": false,
+      "absence_note": "SOP-QA-014 define responsabilidades del MRB, evaluación, disposición, cierre y registros, pero no proporciona un día ni una hora recurrente de reunión."
+    }
+  ]
+}

@@ -4,6 +4,8 @@ import csv
 import json
 from unittest.mock import patch
 
+import pytest
+
 from src.core.config import Settings
 from src.domain.models import RetrievalResult
 from src.features.evaluation import eval_set_integrity
@@ -17,6 +19,11 @@ from src.features.evaluation.generation_eval import (
 from src.features.query.use_cases import QueryUseCase
 
 THRESHOLD = 0.5599
+
+
+class _FakeHeader:
+    def render(self) -> str:
+        return "## Provenance\n- index_profile: fake\n"
 
 
 def _row(answerable: bool, refused: bool) -> dict:
@@ -223,8 +230,10 @@ def _build_fixtures():
     return use_case, retriever
 
 
+@patch("src.features.evaluation.generation_eval.artifacts.resolve_provenance")
 @patch("src.features.evaluation.generation_eval.time.sleep")
-def test_run_writes_report_and_csv_with_expected_metrics(mock_sleep, tmp_path):
+def test_run_writes_report_and_csv_with_expected_metrics(mock_sleep, mock_provenance, tmp_path):
+    mock_provenance.return_value = _FakeHeader()
     eval_set_path = tmp_path / "fake_eval_set.json"
     _write_fake_eval_set(eval_set_path)
     report_dir = tmp_path / "reports"
@@ -237,19 +246,20 @@ def test_run_writes_report_and_csv_with_expected_metrics(mock_sleep, tmp_path):
     assert mock_sleep.call_count == 4
     mock_sleep.assert_called_with(INTER_QUESTION_DELAY_SECONDS)
 
-    assert report_path == report_dir / "generation_eval_v9.9.9.md"
-    assert csv_path == report_dir / "manual_review_checklist_v9.9.9.csv"
+    assert report_path == report_dir / "generation_eval_v9.9.9__raw-v1__off.md"
+    assert csv_path == report_dir / "manual_review_checklist_v9.9.9__raw-v1__off.csv"
     assert report_path.exists()
     assert csv_path.exists()
 
     report_text = report_path.read_text(encoding="utf-8")
     lines = [line for line in report_text.splitlines() if line.strip()]
-    assert lines[0] == "# Generation Evaluation Report — eval_set v9.9.9"
-    assert lines[1] == "## Correct-Refusal Rate: 0.500"
+    assert lines[0] == "## Provenance"
+    assert "# Generation Evaluation Report — eval_set v9.9.9" in report_text
+    assert "## Correct-Refusal Rate: 0.500" in report_text
     assert "False-refusal rate (answerable subset): 0.500" in report_text
     assert "fq001" in report_text
     assert "fq004" in report_text
-    assert "manual_review_checklist_v9.9.9.csv" in report_text
+    assert "manual_review_checklist_v9.9.9__raw-v1__off.csv" in report_text
 
     with csv_path.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -257,8 +267,7 @@ def test_run_writes_report_and_csv_with_expected_metrics(mock_sleep, tmp_path):
         rows = list(reader)
 
     assert len(rows) == 2
-    ids = {row["id"] for row in rows}
-    assert ids == {"fq001", "fq002"}
+    assert {row["id"] for row in rows} == {"fq001", "fq002"}
 
     row_one = next(row for row in rows if row["id"] == "fq001")
     assert row_one["language"] == "en"
@@ -275,6 +284,63 @@ def test_run_writes_report_and_csv_with_expected_metrics(mock_sleep, tmp_path):
     assert row_two["cited_document_ids"] == ""
 
 
+@patch("src.features.evaluation.generation_eval.artifacts.resolve_provenance")
+@patch("src.features.evaluation.generation_eval.time.sleep")
+def test_run_off_and_semantic_produce_distinct_paths(mock_sleep, mock_provenance, tmp_path):
+    mock_provenance.return_value = _FakeHeader()
+    eval_set_path = tmp_path / "fake_eval_set.json"
+    _write_fake_eval_set(eval_set_path)
+
+    use_case, retriever = _build_fixtures()
+    off_report, off_csv = run(
+        eval_set_path=eval_set_path, report_dir=tmp_path / "r", use_case=use_case, retriever=retriever
+    )
+    use_case, retriever = _build_fixtures()
+    sem_report, sem_csv = run(
+        eval_set_path=eval_set_path,
+        report_dir=tmp_path / "r",
+        use_case=use_case,
+        retriever=retriever,
+        expansion_mode="semantic",
+    )
+
+    assert off_report != sem_report and off_csv != sem_csv
+    assert off_report.name == "generation_eval_v9.9.9__raw-v1__off.md"
+    assert sem_report.name == "generation_eval_v9.9.9__raw-v1__semantic.md"
+    assert sem_csv.name == "manual_review_checklist_v9.9.9__raw-v1__semantic.csv"
+
+
+@patch("src.features.evaluation.generation_eval.artifacts.resolve_provenance")
+@patch("src.features.evaluation.generation_eval.time.sleep")
+def test_run_canonical_alias_guarded(mock_sleep, mock_provenance, tmp_path):
+    mock_provenance.return_value = _FakeHeader()
+    eval_set_path = tmp_path / "fake_eval_set.json"
+    _write_fake_eval_set(eval_set_path)
+
+    use_case, retriever = _build_fixtures()
+    with pytest.raises(ValueError):
+        run(
+            eval_set_path=eval_set_path,
+            report_dir=tmp_path / "r",
+            use_case=use_case,
+            retriever=retriever,
+            expansion_mode="semantic",
+            write_canonical_alias=True,
+        )
+
+    use_case, retriever = _build_fixtures()
+    report_path, _csv = run(
+        eval_set_path=eval_set_path,
+        report_dir=tmp_path / "r",
+        use_case=use_case,
+        retriever=retriever,
+        write_canonical_alias=True,
+    )
+    assert report_path.name == "generation_eval_v9.9.9__raw-v1__off.md"
+    assert (tmp_path / "r" / "generation_eval_v9.9.9.md").exists()
+    assert (tmp_path / "r" / "manual_review_checklist_v9.9.9.csv").exists()
+
+
 class _FailingThenScriptedRetriever(_ScriptedRetriever):
     def retrieve(self, query_text: str, k: int = 5, top_n: int = 20) -> list[RetrievalResult]:
         if query_text == "answerable question one":
@@ -289,8 +355,12 @@ class _FailingThenScriptedLlmClient(_ScriptedLlmClient):
         return await super().generate_structured(system_prompt, user_prompt, schema, settings)
 
 
+@patch("src.features.evaluation.generation_eval.artifacts.resolve_provenance")
 @patch("src.features.evaluation.generation_eval.time.sleep")
-def test_run_continues_after_one_question_raises_and_records_error_row(mock_sleep, tmp_path):
+def test_run_continues_after_one_question_raises_and_records_error_row(
+    mock_sleep, mock_provenance, tmp_path
+):
+    mock_provenance.return_value = _FakeHeader()
     eval_set_path = tmp_path / "fake_eval_set.json"
     _write_fake_eval_set(eval_set_path)
     report_dir = tmp_path / "reports"
@@ -343,3 +413,26 @@ def test_run_continues_after_one_question_raises_and_records_error_row(mock_slee
     assert error_row["generated_answer"] == ""
     assert error_row["cited_document_ids"] == ""
     assert error_row["retrieval_succeeded"] == ""
+
+    # the raw exception message must never reach an artifact - only its type
+    assert "simulated transient network error" not in report_text
+
+
+def test_error_row_records_only_exception_type_not_message():
+    from src.features.evaluation.generation_eval import _error_row
+
+    row = _error_row(
+        {
+            "id": "q",
+            "language": "en",
+            "answerable": True,
+            "question": "q",
+            "expected_answer": "",
+            "expected_document_id": "",
+            "expected_section_heading": "",
+        },
+        12.0,
+        RuntimeError("SENSITIVE prompt echoed back by provider"),
+    )
+    assert row["error"] == "RuntimeError"
+    assert "SENSITIVE" not in json.dumps(row)

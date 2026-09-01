@@ -38,6 +38,8 @@ def _to_response_schema(answer: QueryAnswer) -> QueryResponse:
         status=answer.status,
         confidence=answer.confidence,
         threshold=answer.threshold,
+        review_floor=answer.review_floor,
+        gate_band=answer.gate_band,
         language=answer.language,
         request_id=answer.request_id,
     )

@@ -40,6 +40,34 @@ class InMemoryLLMClient:
         return self._response
 
 
+class RecordingEmbedder:
+    """Implements EmbedderPort, recording the exact `texts` lists passed to
+    embed_texts / assert_fits_max_seq_length so tests can assert on them.
+    Deterministic vectors, no sentence-transformers model load."""
+
+    def __init__(self, *, fail_on_embed: bool = False, max_seq: int = 8192) -> None:
+        self.embed_texts_calls: list[list[str]] = []
+        self.assert_fits_calls: list[list[str]] = []
+        self._fail_on_embed = fail_on_embed
+        self._max_seq = max_seq
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        recorded = list(texts)
+        self.embed_texts_calls.append(recorded)
+        if self._fail_on_embed:
+            raise RuntimeError("simulated embedding failure")
+        return [[float(len(text)), float(i)] for i, text in enumerate(recorded)]
+
+    def embed_query(self, text: str) -> list[float]:
+        return [float(len(text)), 0.0]
+
+    def max_seq_length(self) -> int:
+        return self._max_seq
+
+    def assert_fits_max_seq_length(self, texts: list[str]) -> None:
+        self.assert_fits_calls.append(list(texts))
+
+
 class InMemoryVectorStore:
     """Implements just enough of VectorStorePort for /health and /ready
     tests: a fixed ping() outcome, no real ChromaDB connection."""

@@ -11,9 +11,9 @@ from typing import Any, Optional
 
 from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient
 from src.core.config import load_settings
-from src.domain.models import ExpansionMode
-from src.features.evaluation import eval_set_integrity, metrics
-from src.features.evaluation._eval_retriever import build_retriever
+from src.domain.models import ExpansionMode, IndexProfile
+from src.features.evaluation import artifacts, eval_set_integrity, metrics
+from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.query.use_cases import QueryUseCase
 from src.features.retrieval.use_cases import HybridRetriever
 
@@ -47,9 +47,10 @@ CSV_COLUMNS = [
 
 def _build_use_case_and_retriever(
     expansion_mode: ExpansionMode = "off",
+    index_profile: IndexProfile = "raw-v1",
 ) -> tuple[QueryUseCase, HybridRetriever]:
     settings = load_settings()
-    retriever = build_retriever(expansion_mode)
+    retriever = build_retriever(expansion_mode, expected_profile=index_profile)
     llm_client = GroqOpenAiLlmClient()
     return QueryUseCase(retriever, llm_client, settings), retriever
 
@@ -80,6 +81,12 @@ def _p90(latencies_ms: list[float]) -> float:
     return ordered[index]
 
 
+def _error_type(error: Exception) -> str:
+    """Only the exception TYPE — never str(error), which can echo a prompt
+    fragment, the question, or a provider error body back into an artifact."""
+    return type(error).__name__
+
+
 def _error_row(question: dict[str, Any], latency_ms: float, error: Exception) -> dict[str, Any]:
     """A single failing question (e.g. a transient network error) must not abort the
     whole ~13-minute, 40-question sequential run and discard every row already
@@ -102,7 +109,7 @@ def _error_row(question: dict[str, Any], latency_ms: float, error: Exception) ->
         "answer": "",
         "citations": [],
         "latency_ms": latency_ms,
-        "error": str(error),
+        "error": _error_type(error),
     }
 
 
@@ -141,14 +148,14 @@ def _build_row(use_case: QueryUseCase, retriever: HybridRetriever, question: dic
     except Exception as exc:
         latency_ms = (time.monotonic() - start_time) * 1000
         print(
-            f"WARNING: question {question['id']!r} failed with {type(exc).__name__}: {exc}; "
+            f"WARNING: question {question['id']!r} failed with {type(exc).__name__}; "
             "recording an error row and continuing with the rest of the run",
             file=sys.stderr,
         )
         return _error_row(question, latency_ms, exc)
 
 
-def build_report(rows: list[dict[str, Any]], version: str) -> str:
+def build_report(rows: list[dict[str, Any]], version: str, checklist_filename: str) -> str:
     correct_refusal = correct_refusal_rate(rows)
     false_refusal = false_refusal_rate(rows)
     latencies = [row["latency_ms"] for row in rows]
@@ -193,7 +200,7 @@ def build_report(rows: list[dict[str, Any]], version: str) -> str:
         "",
         (
             "Citation accuracy and faithfulness are NOT computed by this script — graded by human "
-            f"review, see `manual_review_checklist_v{version}.csv` for the project owner to grade by "
+            f"review, see `{checklist_filename}` for the project owner to grade by "
             "hand (answerable subset only — unanswerable-subset correctness is already fully "
             "captured by the correct-refusal-rate metric above)."
         ),
@@ -235,16 +242,23 @@ def run(
     use_case: Optional[QueryUseCase] = None,
     retriever: Optional[HybridRetriever] = None,
     expansion_mode: ExpansionMode = "off",
+    index_profile: IndexProfile = "raw-v1",
+    write_canonical_alias: bool = False,
 ) -> tuple[Path, Path]:
     """`use_case`/`retriever` are injectable (port fakes in tests) instead of
     always building real adapters — avoids needing to patch module internals
     to test this against a fake LLM/retriever."""
+    if write_canonical_alias:
+        artifacts.ensure_canonical_alias_allowed(index_profile, expansion_mode)
+
     eval_set_integrity.verify(eval_set_path)
     data = eval_set_integrity.load_eval_set(eval_set_path)
+    version = data["version"]
     questions = data["questions"]
 
     if use_case is None or retriever is None:
-        use_case, retriever = _build_use_case_and_retriever(expansion_mode)
+        assert_live_index_profile(index_profile)
+        use_case, retriever = _build_use_case_and_retriever(expansion_mode, index_profile)
     rows: list[dict[str, Any]] = []
     for question in questions:
         rows.append(_build_row(use_case, retriever, question))
@@ -252,13 +266,24 @@ def run(
     correct_refusal = correct_refusal_rate(rows)
     false_refusal = false_refusal_rate(rows)
 
-    report = build_report(rows, data["version"])
     report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / f"generation_eval_v{data['version']}.md"
+    csv_name = artifacts.artifact_filename(
+        "manual_review_checklist", version, index_profile, expansion_mode, "csv"
+    )
+    header = artifacts.resolve_provenance(index_profile, expansion_mode)
+    report = header.render() + "\n\n" + build_report(rows, version, csv_name)
+    report_path = report_dir / artifacts.artifact_filename(
+        "generation_eval", version, index_profile, expansion_mode, "md"
+    )
     report_path.write_text(report, encoding="utf-8")
 
-    csv_path = report_dir / f"manual_review_checklist_v{data['version']}.csv"
+    csv_path = report_dir / csv_name
     write_manual_review_csv(rows, csv_path)
+
+    if write_canonical_alias:
+        (report_dir / f"generation_eval_v{version}.md").write_text(report, encoding="utf-8")
+        canonical_csv = report_dir / f"manual_review_checklist_v{version}.csv"
+        write_manual_review_csv(rows, canonical_csv)
 
     print(f"Correct-refusal rate: {correct_refusal:.3f}")
     print(f"False-refusal rate: {false_refusal:.3f}")

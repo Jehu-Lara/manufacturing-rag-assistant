@@ -5,7 +5,31 @@ from typing import Any, Literal, Optional
 
 Language = Literal["en", "es"]
 ExpansionMode = Literal["off", "semantic", "lexical", "both"]
+IndexProfile = Literal["raw-v1", "contextual-v1"]
 SourceType = Literal["public", "synthetic"]
+
+# Phase 3 refusal gate band (ADR-009). Under REFUSAL_POLICY=binary only
+# hard_refuse/confident occur; grounded_review is the middle band.
+GateBand = Literal["hard_refuse", "grounded_review", "confident"]
+
+# Internal diagnostic — logged and passed to the evaluator, never serialized
+# in the HTTP response.
+DecisionReason = Literal[
+    "below_binary_threshold",
+    "below_review_floor",
+    "llm_self_refusal",
+    "empty_answer",
+    "missing_evidence",
+    "invalid_evidence_shape",
+    "chunk_not_retrieved",
+    "quote_too_short",
+    "quote_too_long",
+    "quote_not_found",
+    "unresolved_citation",
+    "accepted_grounded",
+    "accepted_confident",
+    "generation_error",
+]
 
 _REQUIRED_STRING_FIELDS = (
     "chunk_id",
@@ -77,5 +101,8 @@ class QueryAnswer:
     status: Literal["ok", "error"]
     confidence: Optional[float]
     threshold: float
+    review_floor: Optional[float]
+    gate_band: GateBand
+    decision_reason: DecisionReason
     language: Language
     request_id: str
