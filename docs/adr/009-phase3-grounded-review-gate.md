@@ -15,7 +15,9 @@ implemented and in force as of commit `273cf1e`; Phase 3A.1 hardens the holdout
 guard and adds this ADR; Phase 3A.2 makes the holdout guard pair-aware. Phase 3B
 (the policy code, prompts, HTTP fields and UI) is implemented behind the
 `binary` default — it changes no behaviour until `REFUSAL_POLICY=grounded_review`
-is set, and the default flip stays gated on the Phase 3C holdout run.
+is set, and the default flip stays gated on the Phase 3C holdout run. Phase 3C
+(§"Measurement" below) adds the runner, guards and provider hooks needed for
+that run; it does not itself flip anything.
 
 ## Context
 
@@ -136,6 +138,64 @@ check over `[]` would be a false guarantee.
 Chunk ids in the holdout are derived from the corpus and verified against
 `chunks.jsonl` — never invented. Whoever implements the grey prompt must not
 adjust its rules after seeing holdout results.
+
+The `gate_holdout_integrity` guard additionally requires `eval_set` and
+`regression_queries` to be present **and pass their own hash check** before the
+holdout is de-duplicated against them (a missing or tampered source could
+otherwise silently narrow the comparison), rejects two holdout questions that
+are identical after NFKC+casefold+whitespace, requires the EN and ES halves of
+an answerable pair to target the same `expected_chunk_ids`, and writes
+atomically.
+
+### 5. Measurement — the Phase 3C causal run (not a decision, an instrument)
+
+Before the paid run, `gate_holdout_profile` buckets all 48 frozen questions by
+band on `contextual-v1/off` and **fails unless each EN/ES × answerable/
+unanswerable cell has ≥ 3 questions in `[0.5500, 0.5999)`**. A holdout that
+barely enters the grey band cannot tell us whether `grounded_review` helps; the
+fix is another draft with more borderline questions, never a lower floor.
+
+`gate_generation_eval` then measures `binary` vs `grounded_review` without
+confounds:
+
+- Retrieval is snapshotted **once** per question and replayed identically to a
+  `binary` and a `grounded_review` `QueryUseCase` — the two runs differ only in
+  policy.
+- `index_profile`, `expansion_mode`, floor, threshold and provider are pinned in
+  the runner, not read from the environment.
+- The `confident` band produces a byte-identical LLM call under both policies, so
+  it is issued once and shared **within a repeat**; a fresh cache per repeat
+  means a response is never reused across repeats. Grey-band prompts differ and
+  are always separate calls. `hard_refuse` calls nothing.
+- Provider fallback is forced **off** (`allow_provider_fallback=False`) so a
+  rate-limit fallover can't swap the model mid-comparison. A content-free
+  `trace_hook` records physical requests, tokens, finish reason, rate-limit,
+  repair and schema-fallback counts — never a prompt, answer or key.
+- 3 full holdout repeats + 3 repeats of the `r001/r002/r018–r020` canary.
+  Artifacts land in a **write-once** directory with `run_manifest.json`,
+  `retrieval.jsonl`, `outcomes.jsonl`, `comparison.md`, a blind
+  citation/faithfulness checklist and `checksums.txt`.
+
+Gates (all must hold; the citation/faithfulness one needs the blind checklist
+graded by hand): zero errors / provider or schema fallbacks; grounded
+correct-refusal ≥ binary globally and per language; grounded false-refusal not
+worse per language and strictly better globally; `r001`/`r002` answered 3/3 and
+`r018`–`r020` refused 3/3 under `grounded_review`; conditional
+citation/faithfulness ≥ 0.90. **These gates are advisory input to a human
+decision — the runner never flips the default.**
+
+### 6. Closure order
+
+1. `ruff`, `mypy --strict`, the full test suite and every integrity guard green
+   (the `gate_holdout` step stays red until the holdout is frozen — that is the
+   one intended exception, and it must go green as part of this step, not be
+   waived).
+2. Owner authors + freezes the holdout; `gate_holdout_profile` passes.
+3. Owner gate: an explicit decision to spend, then the paid `gate_generation_eval`
+   run and the blind review.
+4. **Only if every gate passes:** flip the default to `grounded_review`, move this
+   ADR to `Accepted`, update `SPEC.md` / `CLAUDE.md`. Otherwise `binary` stays
+   and there is no reindex, push, merge or deploy.
 
 ## Alternatives considered
 
