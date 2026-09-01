@@ -57,10 +57,11 @@ jobs:
       - name: Run tests
         run: pytest -v
 
-      # LAST on purpose: RED BY DESIGN until the project owner authors + freezes
-      # the 48-question Phase 3 holdout (eval/gate_holdout_v1.0.0.json). A green
-      # integrity check over an empty draft would be a false guarantee (ADR-009).
-      # Kept last so lint, mypy, the score guard and the full suite still run on
-      # every push while the holdout is unfrozen.
+      # LAST on purpose: guards the frozen 48-question Phase 3 holdout
+      # (eval/gate_holdout_v1.0.0.json, content-approved + frozen 2026-09-01).
+      # It was RED BY DESIGN while the holdout was an unfrozen draft — a green
+      # integrity check over an empty/draft holdout would be a false guarantee
+      # (ADR-009). Kept last so lint, mypy, the score guard and the full suite
+      # still run first.
       - name: Verify Phase 3 gate holdout
         run: python -m src.features.evaluation.gate_holdout_integrity --verify

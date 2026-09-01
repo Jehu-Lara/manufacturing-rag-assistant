@@ -17,7 +17,10 @@ guard and adds this ADR; Phase 3A.2 makes the holdout guard pair-aware. Phase 3B
 `binary` default — it changes no behaviour until `REFUSAL_POLICY=grounded_review`
 is set, and the default flip stays gated on the Phase 3C holdout run. Phase 3C
 (§"Measurement" below) adds the runner, guards and provider hooks needed for
-that run; it does not itself flip anything.
+that run; it does not itself flip anything. As of 2026-09-01 the 48-question
+holdout is owner-approved, frozen and profiled (§4, §"Closure order" step 2); the
+paid `gate_generation_eval` run and the ship decision remain open, so this ADR
+stays **Proposed** and the shipped default stays `binary`.
 
 ## Context
 
@@ -131,9 +134,11 @@ intents each paired EN/ES (24/24 by class, 24/24 by language), no paraphrases of
 `eval_set` v1.1.0 or `regression_queries.json`. `gate_holdout_integrity.verify()`
 enforces `status == "frozen"`, the 48-count, unique ids, the class/language
 balance, per-class required fields, and that every `expected_chunk_ids` entry
-exists in `chunks.jsonl`. The file ships as an **empty draft**; CI's holdout step
-is **red by design** until the owner authors and freezes it. A green integrity
-check over `[]` would be a false guarantee.
+exists in `chunks.jsonl`. The 48 questions were authored in the draft, then
+**content-approved and frozen (`status: frozen`) by the owner on 2026-09-01**;
+until then the file shipped as a draft and CI's holdout step was **red by
+design**, because a green integrity check over an empty or draft holdout would be
+a false guarantee.
 
 Chunk ids in the holdout are derived from the corpus and verified against
 `chunks.jsonl` — never invented. Whoever implements the grey prompt must not
@@ -226,10 +231,12 @@ input to a human decision — the runner never flips the default.**
 1. `ruff`, `mypy --strict`, the full test suite and every integrity guard green
    (the `gate_holdout` step stays red until the holdout is frozen — that is the
    one intended exception, and it must go green as part of this step, not be
-   waived).
-2. Owner authors + freezes the holdout; `gate_holdout_profile` passes.
+   waived). **Done 2026-09-01.**
+2. Owner authors + freezes the holdout; `gate_holdout_profile` passes. **Done
+   2026-09-01** — 48 questions content-approved and frozen; every EN/ES ×
+   answerable/unanswerable cell keeps ≥3 questions in `[0.5500, 0.5999)`.
 3. Owner gate: an explicit decision to spend, then the paid `gate_generation_eval`
-   run and the blind review.
+   run and the blind review. **Open.**
 4. **Only if every gate passes:** flip the default to `grounded_review`, move this
    ADR to `Accepted`, update `SPEC.md` / `CLAUDE.md`. Otherwise `binary` stays
    and there is no reindex, push, merge or deploy.
