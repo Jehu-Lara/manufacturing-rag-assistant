@@ -9,7 +9,14 @@ import tiktoken
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(\S.*?)\s*$")
 
 TARGET_CHUNK_TOKENS = 500
-CHUNK_UPPER_BOUND_TOKENS = 600
+
+# 600 was one constant named CHUNK_UPPER_BOUND_TOKENS, which it never was: no
+# chunk is bounded by it. A section under it is emitted whole (so a chunk can
+# legitimately exceed it after line-boundary splitting), and the real ceiling
+# that matters is the embedding model's max_seq_length, checked separately by
+# the embedder. Two names for the two distinct decisions it actually drives.
+MAX_MERGED_SECTION_TOKENS = 600
+SECTION_SPLIT_TRIGGER_TOKENS = 600
 OVERLAP_RATIO = 0.15
 MIN_MERGE_TOKENS = 150
 """Sections below this size are candidates to merge with a following sibling
@@ -133,7 +140,7 @@ def _parent_breadcrumb(breadcrumb: str) -> str:
 def _merge_small_sibling_sections(sections: list[Section], counter: TiktokenCounter) -> list[Section]:
     """Combine a run of consecutive, same-parent sections that are individually
     below MIN_MERGE_TOKENS into one section, growing toward TARGET_CHUNK_TOKENS
-    and never exceeding CHUNK_UPPER_BOUND_TOKENS.
+    and never exceeding MAX_MERGED_SECTION_TOKENS.
 
     Without this pass, a document with many short sibling sections (a CFR
     subpart full of one-sentence provisions, a glossary-style block of short
@@ -161,7 +168,7 @@ def _merge_small_sibling_sections(sections: list[Section], counter: TiktokenCoun
         j = i + 1
         while j < n and _parent_breadcrumb(sections[j].breadcrumb) == parent:
             candidate_tokens = counter.count_tokens(sections[j].text)
-            if group_tokens + candidate_tokens > CHUNK_UPPER_BOUND_TOKENS:
+            if group_tokens + candidate_tokens > MAX_MERGED_SECTION_TOKENS:
                 break
             group.append(sections[j])
             group_tokens += candidate_tokens
@@ -193,7 +200,7 @@ def _split_section(section: Section, counter: TiktokenCounter) -> list[RawChunk]
     line_token_counts = [counter.count_tokens(line) for line in lines]
     total_tokens = sum(line_token_counts)
 
-    if total_tokens <= CHUNK_UPPER_BOUND_TOKENS:
+    if total_tokens <= SECTION_SPLIT_TRIGGER_TOKENS:
         return [
             RawChunk(
                 section_breadcrumb=section.breadcrumb,

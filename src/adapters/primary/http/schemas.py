@@ -18,6 +18,7 @@ class Citation(BaseModel):
     section_heading: str
     revision: str
     chunk_id: str
+    source_type: Literal["public", "synthetic"]
 
 
 class QueryResponse(BaseModel):

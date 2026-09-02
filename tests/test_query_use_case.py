@@ -65,6 +65,7 @@ def _result(
             "document_title": f"Title {chunk_id}",
             "section_heading": f"Section {chunk_id}",
             "revision": "Rev A",
+            "source_type": "public",
             "chunk_id": chunk_id,
             "chunk_text": chunk_text,
         },

@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import pytest
 
+from src.web import render as render_module
 from src.web.i18n import UI_LABELS
-from src.web.render import _gate_caption, classify_response_state, format_citations
+from src.web.render import (
+    _gate_caption,
+    classify_response_state,
+    format_citations,
+    render_result,
+)
 
 
 def test_classify_response_state_normal_answer():
@@ -98,3 +104,95 @@ def test_gate_caption_grounded_shows_both_limits_and_band():
     )
     assert labels["review_floor_label"] in caption
     assert "grounded_review" in caption
+
+
+def _citation(source_type: str, title: str = "Doc A") -> dict:
+    return {
+        "document_id": "doc-a",
+        "document_title": title,
+        "section_heading": "Section A",
+        "revision": "1",
+        "chunk_id": "doc-a::chunk-0001",
+        "source_type": source_type,
+    }
+
+
+def test_format_citations_marks_synthetic_source_only():
+    result = format_citations([_citation("public", "Public Doc"), _citation("synthetic", "Synthetic Doc")], "en")
+    public_line, synthetic_line = result.splitlines()
+
+    assert UI_LABELS["en"]["synthetic_source_badge"] not in public_line
+    assert UI_LABELS["en"]["synthetic_source_badge"] in synthetic_line
+
+
+def test_format_citations_synthetic_badge_follows_language():
+    result = format_citations([_citation("synthetic")], "es")
+    assert UI_LABELS["es"]["synthetic_source_badge"] in result
+    assert UI_LABELS["en"]["synthetic_source_badge"] not in result
+
+
+class _StCapture:
+    def __init__(self) -> None:
+        self.warnings: list[str] = []
+        self.writes: list[str] = []
+
+    def warning(self, text):
+        self.warnings.append(text)
+
+    def error(self, text):
+        pass
+
+    def write(self, text):
+        self.writes.append(text)
+
+    def subheader(self, text):
+        pass
+
+    def markdown(self, text):
+        pass
+
+    def caption(self, text):
+        pass
+
+
+def _capture_render(monkeypatch, response: dict) -> _StCapture:
+    capture = _StCapture()
+    monkeypatch.setattr(render_module, "st", capture)
+    render_result(UI_LABELS["en"], "en", response, None)
+    return capture
+
+
+def test_render_result_shows_safety_notice_on_an_answered_response(monkeypatch):
+    capture = _capture_render(
+        monkeypatch,
+        {
+            "status": "ok",
+            "refused": False,
+            "answer": "Lock the energy source.",
+            "citations": [_citation("public")],
+            "confidence": 0.9,
+            "threshold": 0.5999,
+            "review_floor": None,
+            "gate_band": "confident",
+            "request_id": "req-1",
+        },
+    )
+
+    assert UI_LABELS["en"]["safety_notice"] in capture.warnings
+
+
+def test_render_result_omits_safety_notice_on_refusal(monkeypatch):
+    """A refusal carries no generated content to verify — the notice would only
+    dilute the one that matters on real answers."""
+    capture = _capture_render(
+        monkeypatch,
+        {
+            "status": "ok",
+            "refused": True,
+            "answer": "I don't have enough information...",
+            "citations": [],
+            "request_id": "req-2",
+        },
+    )
+
+    assert UI_LABELS["en"]["safety_notice"] not in capture.warnings

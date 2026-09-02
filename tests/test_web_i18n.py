@@ -27,6 +27,8 @@ _REQUIRED_UI_LABEL_KEYS = (
     "request_id_label",
     "not_ready_label",
     "privacy_warning",
+    "safety_notice",
+    "synthetic_source_badge",
 )
 
 
@@ -49,3 +51,20 @@ def test_example_questions_are_non_empty_and_distinct() -> None:
     assert EXAMPLE_ANSWERABLE_QUESTION.strip()
     assert EXAMPLE_UNANSWERABLE_QUESTION.strip()
     assert EXAMPLE_ANSWERABLE_QUESTION != EXAMPLE_UNANSWERABLE_QUESTION
+
+
+def test_safety_notice_names_the_controlling_procedure_in_both_languages() -> None:
+    """A generic "may be inaccurate" line would not tell a plant reader what to
+    check; the notice must point at the SOP and the energy-control procedure."""
+    assert "SOP" in UI_LABELS["en"]["safety_notice"]
+    assert "LOTO" in UI_LABELS["en"]["safety_notice"]
+    assert "SOP" in UI_LABELS["es"]["safety_notice"]
+    assert "LOTO" in UI_LABELS["es"]["safety_notice"]
+    assert UI_LABELS["en"]["safety_notice"] != UI_LABELS["es"]["safety_notice"]
+
+
+def test_synthetic_badge_differs_by_language_and_is_visually_marked() -> None:
+    for language in ("en", "es"):
+        badge = UI_LABELS[language]["synthetic_source_badge"]
+        assert badge.startswith("**") and badge.endswith("**")
+    assert UI_LABELS["en"]["synthetic_source_badge"] != UI_LABELS["es"]["synthetic_source_badge"]

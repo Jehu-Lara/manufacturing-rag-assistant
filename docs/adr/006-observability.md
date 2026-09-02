@@ -1,5 +1,13 @@
 # ADR-006: Observability — OTel spans + JSON logs with trace_id
 
+## Status
+
+**Accepted.** In force. Extended, not revised: a content-free LLM trace sink
+(`log_llm_trace`) is now wired in at the composition root, so per-physical-call detail
+(retries, rate limits, schema fallbacks, provider failovers) reaches the same JSON log
+stream. The deliberate scope limit this ADR set — no aggregation, no alerting — still
+holds; `docs/ops/runbook.md` documents what that means operationally.
+
 ## Context
 
 Before this refactor, JSON logging (`api/logging_setup.py`'s `JsonFormatter`)

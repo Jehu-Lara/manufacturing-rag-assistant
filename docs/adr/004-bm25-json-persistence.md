@@ -1,5 +1,10 @@
 # ADR-004: BM25 index persisted as JSON, not pickle
 
+## Status
+
+**Accepted.** In force, and load-bearing: the no-pickle rule is one of the repo's
+prohibited patterns, not merely a past preference.
+
 ## Context
 
 `BM25Okapi` (from `rank_bm25`) has no native serialization. The original

@@ -90,5 +90,18 @@ ENV HF_HUB_OFFLINE=1
 
 EXPOSE 7860
 
+# Distinguishes "the processes are alive" from "the service actually works".
+# start.sh keeps the container up as long as its three children run, so a
+# container whose index failed to validate, or whose API died while nginx kept
+# serving, would still look alive to the runtime. /ready is the only endpoint
+# that answers the real question (it calls into the vector store), and it is
+# reached here through nginx on 7860, so a broken proxy fails the check too.
+# --start-period is 180s because the first request loads bge-m3 and opens the
+# baked Chroma collection; failures during that window do not count against
+# --retries. Python's stdlib is used rather than curl or wget so the check adds
+# no package to the image. urlopen raises on a 503, which exits non-zero.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:7860/ready', timeout=5).status == 200 else 1)"]
+
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/start.sh"]

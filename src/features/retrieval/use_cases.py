@@ -33,9 +33,15 @@ class HybridRetriever:
 
     def retrieve(self, query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[RetrievalResult]:
         with get_tracer().start_as_current_span("retrieval.hybrid.query"):
-            expanded = expand_query(query_text)
-            semantic_query = expanded if self._expansion_mode in ("semantic", "both") else query_text
-            lexical_query = expanded if self._expansion_mode in ("lexical", "both") else query_text
+            # Production runs "off", where neither channel can use the
+            # expansion — computing it anyway meant every served query paid for
+            # a glossary scan whose result was then discarded.
+            if self._expansion_mode == "off":
+                semantic_query = lexical_query = query_text
+            else:
+                expanded = expand_query(query_text)
+                semantic_query = expanded if self._expansion_mode in ("semantic", "both") else query_text
+                lexical_query = expanded if self._expansion_mode in ("lexical", "both") else query_text
             semantic_hits = self._vector_store.query(semantic_query, top_n)
             bm25_hits = self._lexical_index.query(lexical_query, top_n)
 

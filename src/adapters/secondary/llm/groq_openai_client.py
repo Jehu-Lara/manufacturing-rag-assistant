@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Awaitable, Callable, Optional, cast
 
 import groq
@@ -23,8 +23,17 @@ class LlmTraceEvent:
     """Immutable, content-free record of one physical step of a generation
     call. Carries provider/model, token counts, finish reason and error
     shape — never the prompt, the question, the answer, an API key, or a raw
-    exception string. Consumed by an injected `trace_hook` (the Phase 3C
-    generation runner); production passes no hook."""
+    exception string. `str(exc)` in particular is deliberately absent: a
+    provider's error body can echo prompt fragments back, so only the exception
+    TYPE and HTTP status are captured (see `_provider_error_trace_fields`).
+
+    Consumed by an injected `trace_hook`. Two consumers exist: the Phase 3C
+    generation runner, which buckets events for per-call accounting, and
+    `log_llm_trace` below, which production wires in at the composition root
+    (`src.adapters.primary.http.app.lifespan`) so these events reach the JSON
+    log stream. This dataclass's field list is therefore a real disclosure
+    boundary, not just an internal record — adding a field to it adds that
+    field to production's stdout."""
 
     event: str
     provider: str
@@ -44,6 +53,23 @@ class LlmTraceEvent:
 
 
 TraceHook = Callable[[LlmTraceEvent], None]
+
+
+def log_llm_trace(event: LlmTraceEvent) -> None:
+    """Production trace sink. Safe to wire in by construction, not by review:
+    LlmTraceEvent's fields are the only thing it can emit, and that dataclass
+    holds provider/model/token/latency/error-shape values only — never a
+    prompt, a question, an answer, an API key, or str(exc). Until this existed,
+    the per-physical-call picture (retries, 429s, schema fallbacks, provider
+    failovers) was visible only to the Phase 3C eval runner, so production had
+    no way to see a call that was retried four times before succeeding."""
+    fields = {
+        f"llm_{key}": value
+        for key, value in asdict(event).items()
+        if key != "event" and value is not None
+    }
+    logger.info("llm trace", extra={"event": "llm_trace", "llm_event": event.event, **fields})
+
 
 # Groq free-tier chat model with tool/JSON-schema support. The original pick
 # (llama-3.3-70b-versatile) was retired by Groq and started 404ing on every

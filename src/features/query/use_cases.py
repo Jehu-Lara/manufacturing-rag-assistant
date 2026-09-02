@@ -276,10 +276,11 @@ class QueryUseCase:
             citations = grounding.citations
             decision_reason = "accepted_grounded"
         else:
-            citations = CitationResolver.resolve(llm_result.get("citations", []), prompt_results)
-            if not citations:
+            resolution = CitationResolver.resolve(llm_result.get("citations", []), prompt_results)
+            citations = resolution.citations
+            if resolution.failure_reason is not None or not citations:
                 logger.info(
-                    "confident, non-refused answer had no resolvable citations; downgrading to refusal",
+                    "confident, non-refused answer had no fully resolvable citation set; refusing",
                     extra={
                         "request_id": request_id,
                         "event": "uncited_answer_downgraded_to_refusal",

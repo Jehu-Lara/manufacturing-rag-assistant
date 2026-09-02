@@ -1,5 +1,13 @@
 # ADR-005: Deploy/container shape — current reality vs. deferred split
 
+## Status
+
+**Partially superseded by ADR-007.** The combined-container shape this ADR
+describes (nginx + uvicorn + Streamlit in one image) is still what ships, and
+the Phase 4b split into separate `api` + `web` containers is still deferred —
+both of those parts remain in force. What is superseded is the deploy *target*:
+see ADR-007.
+
 > **Partially superseded by ADR-007 (2026-08-28)** — the deploy target
 > reverted from Oracle Cloud back to Hugging Face (now a paid PRO Docker
 > Space, not the free tier this ADR's Oracle-era text describes). This ADR's

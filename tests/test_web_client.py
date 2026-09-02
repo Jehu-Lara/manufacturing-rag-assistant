@@ -118,3 +118,29 @@ def test_query_omits_api_key_header_when_not_configured(monkeypatch):
     client.query("q", "en", transport=transport)
 
     assert "x-api-key" not in captured["headers"]
+
+
+def test_query_sends_client_session_header_when_given(monkeypatch):
+    monkeypatch.setattr(client, "API_KEY", None)
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, json={"ok": True})
+
+    client.query("q", "en", session_id="11111111-1111-4111-8111-111111111111", transport=httpx.MockTransport(handler))
+
+    assert captured["headers"].get("x-client-session") == "11111111-1111-4111-8111-111111111111"
+
+
+def test_query_omits_client_session_header_when_absent(monkeypatch):
+    monkeypatch.setattr(client, "API_KEY", None)
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, json={"ok": True})
+
+    client.query("q", "en", transport=httpx.MockTransport(handler))
+
+    assert "x-client-session" not in captured["headers"]
