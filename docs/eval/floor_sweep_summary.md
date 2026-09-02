@@ -15,7 +15,7 @@
 - embedding_model: BAAI/bge-m3
 - embedding_revision: 5617a9f61b028005a4858fdac845db406aefb181
 - index_build_commit: ee928ae4c5cd27566cc5576c331f639da02783bf
-- evaluation_commit: e0800e0e908abc5a6db3ad1cab87c9463c698704
+- evaluation_commit: 8403ff28f5249c861a20a0031aa959677d631eb2
 - manifest_build_commit: ee928ae4c5cd27566cc5576c331f639da02783bf
 
 ## Exhaustive candidate gates
