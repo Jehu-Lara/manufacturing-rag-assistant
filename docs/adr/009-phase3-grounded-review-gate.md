@@ -10,6 +10,13 @@ LLM-call / latency cost. Until then the shipped default stays
 `REFUSAL_POLICY=binary` at `REFUSAL_COSINE_THRESHOLD=0.5999` and this ADR is a
 plan of record, not a decision in force.
 
+**Floor calibration is closed (2026-09-01).** `REFUSAL_REVIEW_FLOOR = 0.5500` is
+pre-registered here and must not be recalibrated against the 48-question holdout. The holdout
+is this ADR's measurement set; tuning the floor to it would convert the only unbiased evidence
+the A/B has into a fitted parameter, and the resulting numbers would say nothing about
+unseen questions. A future v2 floor requires its own calibration set, separate from both the
+eval set and the holdout, and a newly frozen holdout of its own.
+
 Phase 3A (startup integrity guards, this ADR's §"Startup fail-fast") is
 implemented and in force as of commit `273cf1e`; Phase 3A.1 hardens the holdout
 guard and adds this ADR; Phase 3A.2 makes the holdout guard pair-aware. Phase 3B

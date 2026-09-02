@@ -19,18 +19,29 @@ REQUEST_TIMEOUT_SECONDS = 60.0
 READY_CHECK_TIMEOUT_SECONDS = 5.0
 
 
-def _headers() -> dict[str, str]:
-    return {"X-API-Key": API_KEY} if API_KEY else {}
+def _headers(session_id: Optional[str] = None) -> dict[str, str]:
+    headers: dict[str, str] = {"X-API-Key": API_KEY} if API_KEY else {}
+    if session_id:
+        headers["X-Client-Session"] = session_id
+    return headers
 
 
-def query(question: str, language: str, transport: Optional[httpx.BaseTransport] = None) -> httpx.Response:
-    """`transport` is test-only (httpx.MockTransport) — omitted, this uses
-    httpx's real default transport, identical to calling httpx.post directly."""
+def query(
+    question: str,
+    language: str,
+    session_id: Optional[str] = None,
+    transport: Optional[httpx.BaseTransport] = None,
+) -> httpx.Response:
+    """`session_id` is an opaque per-browser-session UUID minted by the UI and
+    used by the API purely as a rate-limit bucket — it identifies a tab, not a
+    person, is never stored, and is omitted entirely when absent (the API then
+    falls back to the peer address). `transport` is test-only
+    (httpx.MockTransport); omitted, this uses httpx's real default transport."""
     with httpx.Client(transport=transport) as client:
         return client.post(
             f"{API_BASE_URL}/query",
             json={"question": question, "language": language},
-            headers=_headers(),
+            headers=_headers(session_id),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
 

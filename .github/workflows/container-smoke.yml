@@ -1,0 +1,107 @@
+name: Container smoke
+
+# Manual only. The build embeds bge-m3's ~2.3GB of weights and re-embeds the
+# whole corpus, so this takes tens of minutes and is not something to run on
+# every push. It exists because nothing else in CI ever starts the real
+# container: the deployment contract test asserts on the *text* of the
+# Dockerfile and nginx.conf, which cannot tell you whether the routes those
+# files describe actually behave that way at runtime.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: rag4-smoke
+  CONTAINER: rag4-smoke-run
+  # Real credentials are never needed here: no test below reaches generation.
+  # A dummy API_KEY is set precisely so the auth path can be exercised.
+  SMOKE_API_KEY: dummy-smoke-key
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Free disk space for the image build
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Build image
+        run: docker build -t "$IMAGE" .
+
+      - name: Start container
+        run: |
+          docker run -d --name "$CONTAINER" \
+            -e API_KEY="$SMOKE_API_KEY" \
+            -e GROQ_API_KEY=dummy-not-used \
+            -p 7860:7860 \
+            "$IMAGE"
+
+      - name: Wait for readiness (max 180s)
+        run: |
+          for attempt in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7860/ready || true)
+            if [ "$code" = "200" ]; then
+              echo "ready after ~$((attempt * 3))s"
+              exit 0
+            fi
+            if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+              echo "container exited before becoming ready"
+              exit 1
+            fi
+            sleep 3
+          done
+          echo "not ready within 180s"
+          exit 1
+
+      - name: Public routes are reachable
+        run: |
+          for path in / /health /ready; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:7860$path")
+            echo "$path -> $code"
+            [ "$code" = "200" ] || exit 1
+          done
+
+      - name: Backend-only routes are not publicly reachable
+        run: |
+          # POST /query, not GET: a GET would be 405 from FastAPI and 404 from
+          # nginx, so it could not tell the two apart.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"hola","language":"es"}' \
+            http://127.0.0.1:7860/query)
+          echo "POST /query -> $code"
+          [ "$code" = "404" ] || exit 1
+          for path in /docs /openapi.json /redoc; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:7860$path")
+            echo "$path -> $code"
+            [ "$code" = "404" ] || exit 1
+          done
+
+      - name: API auth is enforced on the loopback backend
+        run: |
+          # Reached from inside the container, the way Streamlit reaches it —
+          # nginx returns 404 for /query, so this is the only way to see it.
+          # http.client, not urllib: it returns the status instead of raising
+          # on 4xx, so each probe stays a single line and cannot pick up the
+          # YAML block's indentation the way a multi-line `python -c` would.
+          no_key=$(docker exec "$CONTAINER" python -c 'import http.client,json; c=http.client.HTTPConnection("127.0.0.1",8000,timeout=15); c.request("POST","/query",json.dumps({"question":"hola","language":"es"}),{"Content-Type":"application/json"}); print(c.getresponse().status)')
+          echo "no key -> $no_key"
+          [ "$no_key" = "401" ] || exit 1
+
+          bad_payload=$(docker exec -e SMOKE_API_KEY="$SMOKE_API_KEY" "$CONTAINER" python -c 'import http.client,json,os; c=http.client.HTTPConnection("127.0.0.1",8000,timeout=15); c.request("POST","/query",json.dumps({"question":"hola","language":"fr"}),{"Content-Type":"application/json","X-API-Key":os.environ["SMOKE_API_KEY"]}); print(c.getresponse().status)')
+          echo "valid key, invalid language -> $bad_payload"
+          [ "$bad_payload" = "422" ] || exit 1
+
+      - name: Container logs
+        if: always()
+        run: docker logs "$CONTAINER" || true
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f "$CONTAINER" || true

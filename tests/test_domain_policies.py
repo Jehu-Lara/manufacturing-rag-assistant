@@ -26,6 +26,7 @@ def _result(chunk_id: str, semantic_rank, semantic_score, **metadata_overrides: 
         "document_title": f"Title for {chunk_id}",
         "section_heading": f"Section for {chunk_id}",
         "revision": "Rev A",
+        "source_type": "public",
         "chunk_id": chunk_id,
     }
     metadata.update(metadata_overrides)
@@ -121,28 +122,41 @@ def test_citation_resolver_resolves_from_retrieved_metadata_only():
     results = [_result("chunk-1", 1, 0.9)]
     llm_citations = [{"chunk_id": "chunk-1"}]
 
-    resolved = CitationResolver.resolve(llm_citations, results)
+    resolution = CitationResolver.resolve(llm_citations, results)
 
-    assert resolved == [
+    assert resolution.failure_reason is None
+    assert resolution.citations == [
         Citation(
             document_id="doc-chunk-1",
             document_title="Title for chunk-1",
             section_heading="Section for chunk-1",
             revision="Rev A",
             chunk_id="chunk-1",
+            source_type="public",
         )
     ]
 
 
-def test_citation_resolver_drops_unmatched_chunk_id_and_logs_warning(caplog):
+def test_citation_resolver_carries_source_type_from_retrieved_metadata():
+    results = [_result("chunk-1", 1, 0.9, source_type="synthetic")]
+
+    resolution = CitationResolver.resolve([{"chunk_id": "chunk-1"}], results)
+
+    assert resolution.failure_reason is None
+    assert resolution.citations[0].source_type == "synthetic"
+
+
+def test_citation_resolver_rejects_whole_set_when_one_chunk_id_unmatched(caplog):
+    """Fail-closed: a mixed valid/invalid set used to resolve partially, which
+    served a partly-unverifiable answer as if it were fully cited."""
     results = [_result("chunk-1", 1, 0.9)]
     llm_citations = [{"chunk_id": "chunk-1"}, {"chunk_id": "chunk-unknown"}]
 
     with caplog.at_level(logging.WARNING, logger="src.domain.policies"):
-        resolved = CitationResolver.resolve(llm_citations, results)
+        resolution = CitationResolver.resolve(llm_citations, results)
 
-    assert len(resolved) == 1
-    assert resolved[0].chunk_id == "chunk-1"
+    assert resolution.citations == []
+    assert resolution.failure_reason == "unresolved_citation"
     assert any(
         record.__dict__.get("event") == "citation_not_in_retrieved_set"
         and record.__dict__.get("chunk_id") == "chunk-unknown"
@@ -150,12 +164,47 @@ def test_citation_resolver_drops_unmatched_chunk_id_and_logs_warning(caplog):
     )
 
 
-def test_citation_resolver_empty_llm_citations_returns_empty_list_no_error():
+@pytest.mark.parametrize(
+    "missing_field",
+    ["document_id", "document_title", "section_heading", "revision", "source_type"],
+)
+def test_citation_resolver_rejects_when_retrieved_metadata_is_incomplete(missing_field):
+    result = _result("chunk-1", 1, 0.9)
+    del result.metadata[missing_field]
+
+    resolution = CitationResolver.resolve([{"chunk_id": "chunk-1"}], [result])
+
+    assert resolution.citations == []
+    assert resolution.failure_reason == "unresolved_citation"
+
+
+def test_citation_resolver_rejects_unknown_source_type_value():
+    results = [_result("chunk-1", 1, 0.9, source_type="trusted")]
+
+    resolution = CitationResolver.resolve([{"chunk_id": "chunk-1"}], results)
+
+    assert resolution.citations == []
+    assert resolution.failure_reason == "unresolved_citation"
+
+
+def test_citation_resolver_rejects_non_string_chunk_id():
     results = [_result("chunk-1", 1, 0.9)]
 
-    resolved = CitationResolver.resolve([], results)
+    resolution = CitationResolver.resolve([{"chunk_id": 7}], results)
 
-    assert resolved == []
+    assert resolution.citations == []
+    assert resolution.failure_reason == "unresolved_citation"
+
+
+def test_citation_resolver_empty_llm_citations_returns_empty_set_without_failure():
+    """Empty input is not a resolution failure — the caller (QueryUseCase)
+    still refuses, but the distinction keeps the diagnostic reason honest."""
+    results = [_result("chunk-1", 1, 0.9)]
+
+    resolution = CitationResolver.resolve([], results)
+
+    assert resolution.citations == []
+    assert resolution.failure_reason is None
 
 
 def _grounding_result(chunk_id: str, chunk_text: str, semantic_rank: int = 1) -> RetrievalResult:

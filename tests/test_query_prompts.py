@@ -76,6 +76,7 @@ def _fake_result(chunk_id: str, text: str) -> RetrievalResult:
             "document_title": f"Document for {chunk_id}",
             "section_heading": f"Section for {chunk_id}",
             "revision": "2026-01-01",
+            "source_type": "public",
             "chunk_text": text,
         },
     )

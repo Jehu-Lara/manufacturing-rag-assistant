@@ -5,10 +5,10 @@ import math
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, cast
 
 from src.core.config import RefusalPolicyName
-from src.domain.models import Citation, DecisionReason, GateBand, RetrievalResult
+from src.domain.models import Citation, DecisionReason, GateBand, RetrievalResult, SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -219,34 +219,82 @@ class GroundedEvidenceResolver:
                 seen.add(chunk_id)
                 cited_ids.append(chunk_id)
 
-        citations = CitationResolver.resolve([{"chunk_id": cid} for cid in cited_ids], results)
-        if not citations:
+        resolution = CitationResolver.resolve([{"chunk_id": cid} for cid in cited_ids], results)
+        if resolution.failure_reason is not None or not resolution.citations:
             return GroundingValidation([], "unresolved_citation")
-        return GroundingValidation(citations, None)
+        return GroundingValidation(resolution.citations, None)
+
+
+@dataclass(frozen=True)
+class CitationResolution:
+    citations: list[Citation]
+    failure_reason: Optional[DecisionReason]
+
+
+# Every field a Citation carries besides chunk_id is looked up here, from the
+# real retrieved chunk. None of them is ever read from LLM output.
+_CITATION_METADATA_FIELDS = (
+    "document_id",
+    "document_title",
+    "section_heading",
+    "revision",
+    "source_type",
+)
 
 
 class CitationResolver:
+    """Fail-closed, like GroundedEvidenceResolver: one citation naming a chunk
+    that wasn't retrieved — or a retrieved chunk whose metadata is missing a
+    citation field — invalidates the whole set. Partial resolution used to
+    drop the bad entry and serve the rest, which quietly presented a
+    partly-unverifiable answer as fully cited."""
+
     @staticmethod
-    def resolve(llm_citations: list[dict[str, Any]], results: Sequence[RetrievalResult]) -> list[Citation]:
+    def resolve(
+        llm_citations: Sequence[Any], results: Sequence[RetrievalResult]
+    ) -> CitationResolution:
         results_by_chunk_id = {result.chunk_id: result for result in results}
         resolved: list[Citation] = []
+
         for llm_citation in llm_citations:
+            if not isinstance(llm_citation, dict):
+                return CitationResolver._reject("invalid_citation_shape", None)
             chunk_id = llm_citation.get("chunk_id")
-            result = results_by_chunk_id.get(chunk_id) if isinstance(chunk_id, str) else None
+            if not isinstance(chunk_id, str):
+                return CitationResolver._reject("invalid_citation_shape", None)
+
+            result = results_by_chunk_id.get(chunk_id)
             if result is None:
-                logger.warning(
-                    "LLM cited a chunk_id not among the retrieved chunks; dropping citation",
-                    extra={"event": "citation_not_in_retrieved_set", "chunk_id": chunk_id},
-                )
-                continue
+                return CitationResolver._reject("citation_not_in_retrieved_set", chunk_id)
+
             metadata = result.metadata
+            fields: dict[str, str] = {}
+            for field_name in _CITATION_METADATA_FIELDS:
+                value = metadata.get(field_name)
+                if not isinstance(value, str) or not value.strip():
+                    return CitationResolver._reject("citation_metadata_incomplete", chunk_id)
+                fields[field_name] = value
+            if fields["source_type"] not in ("public", "synthetic"):
+                return CitationResolver._reject("citation_metadata_incomplete", chunk_id)
+
             resolved.append(
                 Citation(
-                    document_id=metadata["document_id"],
-                    document_title=metadata["document_title"],
-                    section_heading=metadata["section_heading"],
-                    revision=metadata["revision"],
+                    document_id=fields["document_id"],
+                    document_title=fields["document_title"],
+                    section_heading=fields["section_heading"],
+                    revision=fields["revision"],
                     chunk_id=result.chunk_id,
+                    source_type=cast(SourceType, fields["source_type"]),
                 )
             )
-        return resolved
+        return CitationResolution(resolved, None)
+
+    @staticmethod
+    def _reject(event: str, chunk_id: Optional[str]) -> CitationResolution:
+        """Logs the event and the offending chunk_id only — never the citation
+        payload, the answer, or any chunk body."""
+        logger.warning(
+            "citation could not be resolved from retrieved metadata; rejecting the whole set",
+            extra={"event": event, "chunk_id": chunk_id},
+        )
+        return CitationResolution([], "unresolved_citation")

@@ -8,7 +8,11 @@ import groq
 import httpx
 import pytest
 
-from src.adapters.secondary.llm.groq_openai_client import MAX_COMPLETION_TOKENS, GroqOpenAiLlmClient
+from src.adapters.secondary.llm.groq_openai_client import (
+    MAX_COMPLETION_TOKENS,
+    GroqOpenAiLlmClient,
+    log_llm_trace,
+)
 from src.core.config import Settings
 from src.core.errors import GenerationError
 from src.features.query.prompts import JSON_SCHEMA
@@ -373,3 +377,150 @@ def test_trace_hook_counts_schema_fallback_as_two_attempts(mock_groq_cls, mock_o
     assert len([e for e in events if e.event == "physical_failed"]) == 1
     assert len([e for e in events if e.event == "schema_fallback"]) == 1
     assert len([e for e in events if e.event == "physical_request"]) == 1
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.asyncio.sleep", new_callable=AsyncMock)
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_production_trace_sink_logs_call_shape_without_any_content(
+    mock_groq_cls, mock_openai_cls, mock_sleep, caplog
+):
+    """log_llm_trace is the hook production wires in, so what it writes to
+    stdout is a real disclosure surface. Exercised over the noisiest path
+    available (rate limit, then a repair retry) so every event kind gets
+    emitted through it, not just the happy one."""
+    sensitive_key = "groq-test-key"
+    mock_groq_cls.return_value = _async_client_with_create(
+        _groq_rate_limit_error(), _response(INVALID_JSON_TEXT), _response_with_usage(VALID_JSON_TEXT),
+        side_effect=True,
+    )
+
+    with caplog.at_level("INFO", logger="src.adapters.secondary.llm.groq_openai_client"):
+        _run(
+            GroqOpenAiLlmClient(allow_provider_fallback=False, trace_hook=log_llm_trace).generate_structured(
+                "SENSITIVE-SYSTEM-PROMPT", "SENSITIVE-USER-QUESTION", JSON_SCHEMA, _settings("groq")
+            )
+        )
+
+    trace_records = [r for r in caplog.records if r.__dict__.get("event") == "llm_trace"]
+    assert trace_records, "the production trace sink emitted nothing"
+    assert {r.__dict__["llm_event"] for r in trace_records} >= {
+        "physical_attempt",
+        "physical_request",
+        "rate_limited",
+    }
+
+    forbidden = (
+        "SENSITIVE-SYSTEM-PROMPT",
+        "SENSITIVE-USER-QUESTION",
+        sensitive_key,
+        "openai-test-key",
+        "Authorization",
+        VALID_JSON_TEXT,
+        INVALID_JSON_TEXT,
+        VALID_PAYLOAD["answer"],
+    )
+    blob = "\n".join(
+        f"{record.getMessage()} {sorted(record.__dict__.items(), key=lambda kv: kv[0])!r}"
+        for record in trace_records
+    )
+    for secret in forbidden:
+        assert secret not in blob, f"{secret!r} leaked into an llm_trace log line"
+
+
+def test_production_trace_sink_drops_unset_fields_instead_of_logging_nulls(caplog):
+    from src.adapters.secondary.llm.groq_openai_client import LlmTraceEvent
+
+    with caplog.at_level("INFO", logger="src.adapters.secondary.llm.groq_openai_client"):
+        log_llm_trace(LlmTraceEvent(event="physical_attempt", provider="groq", phase="initial"))
+
+    record = next(r for r in caplog.records if r.__dict__.get("event") == "llm_trace")
+    assert record.__dict__["llm_event"] == "physical_attempt"
+    assert record.__dict__["llm_provider"] == "groq"
+    assert record.__dict__["llm_phase"] == "initial"
+    assert "llm_latency_ms" not in record.__dict__
+    assert "llm_error_type" not in record.__dict__
+
+
+# A provider's error body can echo the prompt back, so str(exc) is the one
+# field most likely to leak content through an error path. This marker exists
+# only to make that leak detectable: it is planted in the exception message and
+# body, and must appear in neither the trace events nor their log lines.
+EXCEPTION_CANARY = "EXC-CANARY-4f21a9-provider-echoed-the-question-back"
+
+
+def _groq_rate_limit_error_carrying_the_canary() -> groq.RateLimitError:
+    request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    body = {"error": {"message": EXCEPTION_CANARY}}
+    response = httpx.Response(429, request=request, json=body)
+    return groq.RateLimitError(EXCEPTION_CANARY, response=response, body=body)
+
+
+def _recording_and_logging_hook(events: list) -> object:
+    def hook(event) -> None:
+        events.append(event)
+        log_llm_trace(event)
+
+    return hook
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.asyncio.sleep", new_callable=AsyncMock)
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_rate_limit_error_text_reaches_neither_the_trace_event_nor_its_log_line(
+    mock_groq_cls, mock_openai_cls, mock_sleep, caplog
+):
+    error = _groq_rate_limit_error_carrying_the_canary()
+    assert EXCEPTION_CANARY in str(error), "the marker must really be in the exception"
+    mock_groq_cls.return_value = _async_client_with_create(*([error] * 5), side_effect=True)
+    events: list = []
+
+    with caplog.at_level("INFO", logger="src.adapters.secondary.llm.groq_openai_client"):
+        with pytest.raises(GenerationError):
+            _run(
+                GroqOpenAiLlmClient(
+                    allow_provider_fallback=False, trace_hook=_recording_and_logging_hook(events)
+                ).generate_structured("system", "user", JSON_SCHEMA, _settings("groq"))
+            )
+
+    # The shape IS captured — this is not passing by emitting nothing.
+    assert any(e.event == "rate_limited" for e in events)
+    assert any(e.error_type == "RateLimitError" for e in events)
+    assert any(e.status_code == 429 for e in events)
+
+    for event in events:
+        assert EXCEPTION_CANARY not in repr(event)
+    trace_records = [r for r in caplog.records if r.__dict__.get("event") == "llm_trace"]
+    assert trace_records
+    for record in trace_records:
+        assert EXCEPTION_CANARY not in f"{record.getMessage()} {record.__dict__!r}"
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_unexpected_exception_text_reaches_neither_the_trace_event_nor_its_log_line(
+    mock_groq_cls, mock_openai_cls, caplog
+):
+    """The non-provider path: an arbitrary exception carries no HTTP response,
+    so only its type should survive into the trace."""
+    mock_groq_cls.return_value = _async_client_with_create(RuntimeError(EXCEPTION_CANARY), side_effect=True)
+    events: list = []
+
+    with caplog.at_level("INFO", logger="src.adapters.secondary.llm.groq_openai_client"):
+        with pytest.raises(GenerationError):
+            _run(
+                GroqOpenAiLlmClient(
+                    allow_provider_fallback=False, trace_hook=_recording_and_logging_hook(events)
+                ).generate_structured("system", "user", JSON_SCHEMA, _settings("groq"))
+            )
+
+    assert any(e.event == "physical_failed" for e in events)
+    assert any(e.error_type == "RuntimeError" for e in events)
+    assert all(e.status_code is None for e in events)
+
+    for event in events:
+        assert EXCEPTION_CANARY not in repr(event)
+    trace_records = [r for r in caplog.records if r.__dict__.get("event") == "llm_trace"]
+    assert trace_records
+    for record in trace_records:
+        assert EXCEPTION_CANARY not in f"{record.getMessage()} {record.__dict__!r}"

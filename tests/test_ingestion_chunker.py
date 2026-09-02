@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from src.features.ingestion.chunker import (
-    CHUNK_UPPER_BOUND_TOKENS,
+    MAX_MERGED_SECTION_TOKENS,
     MIN_MERGE_TOKENS,
+    SECTION_SPLIT_TRIGGER_TOKENS,
     TARGET_CHUNK_TOKENS,
     TiktokenCounter,
     _merge_small_sibling_sections,
@@ -52,7 +53,7 @@ def test_short_sections_produce_a_single_chunk():
     section_one_chunks = [c for c in chunks if c.section_breadcrumb == "Section One"]
 
     assert len(section_one_chunks) == 1
-    assert section_one_chunks[0].token_count <= CHUNK_UPPER_BOUND_TOKENS
+    assert section_one_chunks[0].token_count <= SECTION_SPLIT_TRIGGER_TOKENS
 
 
 def test_long_section_is_split_into_target_band_with_overlap():
@@ -69,7 +70,7 @@ def test_long_section_is_split_into_target_band_with_overlap():
         # somewhat outside the exact target band. Only the LAST chunk in a
         # section is allowed to be small (whatever's left over); every other
         # chunk should still land in a band around the target.
-        assert TARGET_CHUNK_TOKENS - 100 <= chunk.token_count <= CHUNK_UPPER_BOUND_TOKENS + 50, (
+        assert TARGET_CHUNK_TOKENS - 100 <= chunk.token_count <= SECTION_SPLIT_TRIGGER_TOKENS + 50, (
             f"chunk {chunk.start_line}-{chunk.end_line} token_count={chunk.token_count} "
             "outside the expected band"
         )
@@ -151,3 +152,13 @@ def test_unrelated_top_level_sections_are_never_merged_with_each_other():
 def test_chunk_document_defaults_to_a_fresh_counter_when_none_given():
     chunks = chunk_document(_build_body(num_long_section_lines=5))
     assert chunks
+
+
+def test_merge_cap_and_split_trigger_are_separate_named_decisions():
+    """They share the value 600 today, but they are not the same rule: one caps
+    how large a merged group of small sibling sections may grow, the other
+    decides when a single section is split. A future change to either must be
+    a deliberate change to that one, not a silent change to both."""
+    assert MAX_MERGED_SECTION_TOKENS == 600
+    assert SECTION_SPLIT_TRIGGER_TOKENS == 600
+    assert TARGET_CHUNK_TOKENS == 500

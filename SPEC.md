@@ -93,7 +93,7 @@ RAG4/
 ├── ingestion/output/             # regenerated chunks (gitignored)
 ├── retrieval/output/             # regenerated Chroma + BM25 JSON (gitignored)
 ├── eval/                          # eval set and versioned reports
-├── tests/                         # 168-test suite
+├── tests/                         # test suite (count: `pytest --collect-only -q`)
 └── docs/                          # ADRs, architecture, HF Static showcase
 ```
 
@@ -213,3 +213,80 @@ Two of the 14 reviewed rows needed judgment calls, both recorded in `reviewer_no
 - **Phase 3C infrastructure (implemented, not yet runnable):** `_eval_retriever.build_retriever()` now runs the full manifest/Chroma/BM25 coherence check before returning, so no runner measures a physically incoherent index. `gate_holdout_integrity` hardened: `eval_set`/`regression_queries` mandatory + integrity-verified before de-dup, internal normalized-duplicate rejection, EN/ES answerable pairs must share `expected_chunk_ids`, atomic `--write`. New `gate_holdout_profile` (pre-freeze: ≥3 grey-band questions per EN/ES × class cell or author another draft). New `GroqOpenAiLlmClient(allow_provider_fallback=False, trace_hook=…)` — production defaults unchanged; content-free `LlmTraceEvent` stream (tokens, finish_reason, fingerprint, rate-limit/repair/fallback markers, never prompt/answer/key). New `gate_generation_eval`: snapshot-once/replay causal `binary`-vs-`grounded_review` matrix (holdout ×3 + `r001/r002/r018–r020` canary ×3), within-repeat sharing of the byte-identical confident call, write-once artifact dir with checksums + blind checklist, advisory automated gates.
 - **Done (owner), 2026-09-01:** the 48 questions in `eval/gate_holdout_v1.0.0.json` were content-approved, frozen (`status: frozen`) and profiled — `gate_holdout_profile` passes with ≥3 grey-band questions in every EN/ES × answerable/unanswerable cell. CI's final holdout step is now green. This does **not** flip the default or accept ADR-009.
 - **NOT done (owner):** obtain an explicit spend decision and run `gate_generation_eval` on `contextual-v1` with a non-rate-limited provider; grade the blind citation/faithfulness checklist; then — only if every gate passes — flip the default to `grounded_review`, move ADR-009 to `Accepted`, and update docs. If any gate fails, `binary` stays and there is no reindex, push, merge or deploy.
+
+---
+
+## Addendum, 2026-09-01 — full-spectrum audit remediation (P0/P1/P2)
+
+Implemented in three waves. No byte-stable invariant moved: `REFUSAL_COSINE_THRESHOLD` is still
+`0.5999`, `REFUSAL_REVIEW_FLOOR` still `0.5500`, RRF `k=60` with the ascending-`chunk_id`
+tie-break, `REFUSAL_POLICY` still defaults to `binary`, `expansion_mode` still `off`, and the
+served index profile is still `contextual-v1`. No index was rebuilt and no frozen dataset was
+re-stamped.
+
+**P0 — product safety and honest evidence.**
+- `Citation` now carries `source_type` (`public` | `synthetic`) end to end: domain model → HTTP
+  body (additive; the Phase 0 contract snapshot is projected, never rewritten) → UI. The UI badges
+  **only** synthetic sources. A reader can now tell a real CFR/OSHA citation from a synthetic
+  example without opening `corpus/`.
+- Every answered response renders a bilingual safety notice pointing at the controlling SOP and
+  the facility's LOTO/energy-control procedure. Refusals and technical errors do not carry it —
+  they contain no generated content to verify.
+- README and the showcase page were corrected. Retrieval Recall@5 is reported as **0.887** (en
+  0.917 / es 0.844) on the profile actually served (`contextual-v1` / `off`, `eval_set` v1.1.0).
+  The generation-side numbers (correct-refusal 0.900, false-refusal 0.200, citation 0.767,
+  faithfulness 0.967) are now explicitly labelled as **historical `eval_set` v1.0.0 measurements
+  on the `raw-v1` index, not re-measured on the shipped profile**.
+- Fixed test counts were removed from README, SPEC and the showcase; the docs point at
+  `pytest --collect-only -q` instead.
+
+**P1 — integrity, prompt boundary, observability, operations.**
+- `CitationResolver` is fail-closed. An unmatched `chunk_id`, a malformed citation entry, or
+  incomplete retrieved metadata rejects the entire set and degrades the response to the canonical
+  refusal. It logs the event and the offending `chunk_id`; it never raises and never logs content.
+- `build_user_prompt` replaced the flat `key: value` layout with a JSON envelope inside
+  `<retrieved_context_json>` tags. The old layout was line-oriented, so chunk text containing a
+  newline plus `Question:` could impersonate a top-level prompt field. Chunk text is passed
+  through byte-exact, which the verbatim-quote check depends on.
+- An EN/ES prompt-injection canary (`OUTPUT PWNED`) is in the suite. Its module docstring states
+  plainly what it does not prove: a unit test cannot show that a real LLM resists injection. That
+  question belongs to the owner-gated `gate_generation_eval` run.
+- A content-free LLM trace sink (`log_llm_trace`) is wired in at the composition root, so
+  production sees retries, rate limits, schema fallbacks and provider failovers. A test asserts no
+  prompt, question, answer, key, `Authorization` header or `str(exc)` reaches those log lines.
+- `HybridRetriever` no longer computes the acronym expansion when `expansion_mode == "off"` (the
+  production setting) — the result was built and then discarded on every served query.
+- The AST import invariant was generalized: `src/web/` is now checked for direct imports of
+  `src.domain`, `src.features` and `src.adapters`, with a guard-the-guard test.
+- `docs/ops/runbook.md` documents five real failure modes with the log line you would actually
+  see, and states honestly that detection is manual — there is no aggregation or alerting.
+
+**P2 — quota, structural debt, operational contracts.**
+- Rate limiting is keyed per browser session. The UI mints one opaque UUID per session and sends
+  it as `X-Client-Session`; the API validates it (400 if malformed) and uses it purely as a bucket
+  label — never logged, never persisted. The peer-address fallback remains for callers without the
+  header. This fixes a real defect: nginx proxies the Streamlit WebSocket, so every visitor's
+  `/query` arrives at FastAPI from the same loopback peer, and the address-keyed limiter was one
+  global bucket. It is **not** an nginx-level IP limit, and is not described as one. ADR-002 is
+  amended accordingly.
+- The limiter uses explicit `get`/reinsert instead of a `defaultdict`, so per-session keys cannot
+  accumulate empty buckets. That alone only bounds each key's deque, so `allow` also sweeps
+  expired keys out of the map — at most one pass per window, on the request path, with an
+  injectable clock so the eviction is tested without sleeping or moving the process clock. Without
+  the sweep the map would still grow one entry per browser session ever seen.
+- `CHUNK_UPPER_BOUND_TOKENS` was split into `MAX_MERGED_SECTION_TOKENS` and
+  `SECTION_SPLIT_TRIGGER_TOKENS`. The old name claimed a bound that never existed — a section
+  under it is emitted whole, and line-boundary splitting can exceed it. Same value (600), same
+  behaviour, no rechunk, no reindex.
+- ADR-001 through ADR-006 gained explicit `## Status` sections. ADR-002 is "Accepted, amended";
+  ADR-005 is "Partially superseded by ADR-007".
+- `chunk_id`'s positional construction and the required corpus-change re-anchoring procedure are
+  documented in `CLAUDE.md`, as is the rule that `REFUSAL_REVIEW_FLOOR` is never recalibrated
+  against the Phase 3 holdout, and that `raw-v1` / `off` artifacts are never overwritten.
+- `.github/workflows/container-smoke.yml` (manual only) starts the real image and asserts the live
+  routing and auth contract, which the text-matching deployment contract test cannot. The
+  Dockerfile gained a `HEALTHCHECK` against `/ready` with a 180s start period.
+
+**Not done, and deliberately owner-gated:** the paid `gate_generation_eval` A/B run, the
+`REFUSAL_POLICY` default flip to `grounded_review`, moving ADR-009 to Accepted, and any Hugging
+Face deployment. None of those is implied by this work.

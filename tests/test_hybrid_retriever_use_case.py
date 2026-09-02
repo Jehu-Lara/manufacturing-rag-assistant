@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.features.retrieval import use_cases as retrieval_use_cases
 from src.features.retrieval.use_cases import DEFAULT_TOP_N, SEMANTIC_EXTRACTION_K, HybridRetriever
 
 
@@ -154,3 +155,36 @@ def test_expansion_mode_both_expands_both():
     HybridRetriever(vs, lx, expansion_mode="both").retrieve("What is NPSHA?", k=1)
     assert "net positive suction head available" in vs.last_query
     assert "net positive suction head available" in lx.last_query
+
+
+def test_expansion_mode_off_never_computes_the_expansion(monkeypatch):
+    """The off mode is production. Building an expansion neither channel can
+    use is pure per-query cost, and the equal-output assertions elsewhere in
+    this file cannot see the difference."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        retrieval_use_cases,
+        "expand_query",
+        lambda query: calls.append(query) or query,
+    )
+    vs = _StubVectorStore(hits=[("c1", 0.9, {"document_id": "d"})], metadata_by_id={"c1": {"document_id": "d"}})
+    lx = _StubLexicalIndex(hits=[("c1", 1.0)])
+
+    HybridRetriever(vs, lx, expansion_mode="off").retrieve("What is NPSHA?", k=1)
+
+    assert calls == []
+
+
+def test_expansion_mode_semantic_still_computes_the_expansion(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        retrieval_use_cases,
+        "expand_query",
+        lambda query: calls.append(query) or query,
+    )
+    vs = _StubVectorStore(hits=[("c1", 0.9, {"document_id": "d"})], metadata_by_id={"c1": {"document_id": "d"}})
+    lx = _StubLexicalIndex(hits=[("c1", 1.0)])
+
+    HybridRetriever(vs, lx, expansion_mode="semantic").retrieve("What is NPSHA?", k=1)
+
+    assert calls == ["What is NPSHA?"]

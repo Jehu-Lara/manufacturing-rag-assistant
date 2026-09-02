@@ -151,6 +151,7 @@ def _fake_retrieval_result(chunk_id: str) -> RetrievalResult:
             "document_title": "Doc A",
             "section_heading": "Section A",
             "revision": "Rev A",
+            "source_type": "public",
             "chunk_id": chunk_id,
             "chunk_text": "some chunk text",
         },

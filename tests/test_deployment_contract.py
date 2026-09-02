@@ -72,6 +72,11 @@ def test_dockerfile_reproducibility_and_runtime_contract():
     assert "ENV HF_HOME=/home/user/.cache/huggingface" in dockerfile
     assert "ENV HF_HUB_OFFLINE=1" in dockerfile
     assert "RUN chown -R" not in dockerfile
+    # Liveness of the process tree is not health of the service: /ready is the
+    # only endpoint that actually queries the vector store.
+    assert "HEALTHCHECK" in directives
+    assert "--start-period=180s" in directives
+    assert "/ready" in directives
 
 
 def test_docker_context_excludes_private_and_nonruntime_content():

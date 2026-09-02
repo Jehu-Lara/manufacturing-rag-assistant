@@ -4,6 +4,8 @@ from typing import Any, Literal, Optional
 
 import streamlit as st
 
+from src.web.i18n import UI_LABELS
+
 
 def classify_response_state(response_json: dict[str, Any]) -> Literal["answer", "refused", "error"]:
     """status=="error" wins regardless of refused, since a technical failure
@@ -16,12 +18,22 @@ def classify_response_state(response_json: dict[str, Any]) -> Literal["answer", 
 
 
 def format_citations(citations: list[dict[str, Any]], lang: str) -> str:
+    """Marks synthetic sources, and only synthetic ones: an unmarked line is a
+    positive claim that the citation is a real public document, so badging
+    everything would carry no information and badging a public source would be
+    a false label."""
     if not citations:
         return ""
-    lines = [
-        f"- **{citation['document_title']}** — {citation['section_heading']} (rev. {citation['revision']})"
-        for citation in citations
-    ]
+    badge = UI_LABELS[lang]["synthetic_source_badge"]
+    lines = []
+    for citation in citations:
+        line = (
+            f"- **{citation['document_title']}** — {citation['section_heading']} "
+            f"(rev. {citation['revision']})"
+        )
+        if citation.get("source_type") == "synthetic":
+            line = f"{line} {badge}"
+        lines.append(line)
     return "\n".join(lines)
 
 
@@ -57,6 +69,9 @@ def render_result(
     if state == "answer":
         st.subheader(labels["answer_heading"])
         st.write(last_response["answer"])
+        # Only the answered state carries generated content a reader could act
+        # on; a refusal and a technical error have nothing to verify.
+        st.warning(labels["safety_notice"])
         st.subheader(labels["citations_heading"])
         st.markdown(format_citations(last_response["citations"], lang))
         st.caption(_gate_caption(labels, last_response))

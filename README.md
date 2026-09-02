@@ -7,9 +7,9 @@ See [`SPEC.md`](SPEC.md) for the complete scope, decisions, measured limitations
 ## Current status
 
 - Corpus and ingestion: complete — 14 documents (9 public, 5 clearly labeled synthetic) produce 228 metadata-complete chunks.
-- Retrieval: complete — hybrid BM25 + `BAAI/bge-m3` retrieval; Recall@5 is 0.833.
+- Retrieval: complete — hybrid BM25 + `BAAI/bge-m3` retrieval. On the profile actually served (`contextual-v1` / `expansion_mode=off`) against the frozen `eval_set` v1.1.0, Recall@5 is **0.887** overall — English 0.917 (n=48), Spanish 0.844 (n=32); Recall@3 0.825, MRR 0.721. Report: [`eval/reports/retrieval_report_v1.1.0__contextual-v1__off.md`](eval/reports/retrieval_report_v1.1.0__contextual-v1__off.md). The older headline 0.833 was `eval_set` v1.0.0 on the pre-`contextual-v1` index and is kept only in `SPEC.md` as history.
 - Generation/API/UI: implemented and tested — FastAPI, Streamlit, Groq (`openai/gpt-oss-120b`) with OpenAI (`gpt-4o-mini`) fallback, bilingual responses, deterministic refusal gate, and citations resolved from retrieved metadata.
-- Evaluation: correct-refusal 0.900 (passes), false-refusal 0.200 (documented exception), citation accuracy 23/30 = 0.767 (below target), and faithfulness 29/30 = 0.967 (passes). The citation and faithfulness verdicts are human-reviewed, not LLM-as-judge scores.
+- Evaluation: the generation-side numbers — correct-refusal 0.900, false-refusal 0.200 (documented exception), citation accuracy 23/30 = 0.767 (below target), faithfulness 29/30 = 0.967 — are **historical measurements taken on `eval_set` v1.0.0 against the `raw-v1` index**. They have **not** been re-measured on the `contextual-v1` profile that ships today, so they describe an index the system no longer serves. The citation and faithfulness verdicts are human-reviewed, not LLM-as-judge scores. Re-running `generation_eval` makes real, paid third-party LLM calls and is owner-gated.
 - Public showcase: live as a free [Hugging Face Static Space](https://huggingface.co/spaces/JehuLara/manufacturing-rag-assistant). It is a portfolio page only and does not run the RAG.
 - Interactive deployment: a second, separate Hugging Face PRO Docker Space (amd64, CPU Basic), published manually from a selected green `master` commit through a keyless GitHub Actions workflow. Oracle Cloud was the intended runtime until 2026-08-28, when it was abandoned after remaining blocked on regional ARM capacity — see [`docs/adr/007-hf-pro-docker-space-deploy.md`](docs/adr/007-hf-pro-docker-space-deploy.md). No live interactive deployment exists yet.
 
@@ -93,11 +93,12 @@ python -m src.features.evaluation.eval_set_integrity --verify
 pytest
 ```
 
-The current suite contains 168 passing tests. CI runs the same lint, type, integrity, and test gates on pushes and pull requests.
+For the current test count, run `pytest --collect-only -q` — a number pinned in prose goes stale silently and then reads as a claim the repo no longer supports. CI runs the same lint, type, integrity, and test gates on pushes and pull requests.
 
 ## Evidence
 
-- [`eval/reports/retrieval_report_v1.0.0.md`](eval/reports/retrieval_report_v1.0.0.md)
+- [`eval/reports/retrieval_report_v1.1.0__contextual-v1__off.md`](eval/reports/retrieval_report_v1.1.0__contextual-v1__off.md) — the served profile
+- [`eval/reports/retrieval_report_v1.0.0.md`](eval/reports/retrieval_report_v1.0.0.md) — historical (`eval_set` v1.0.0)
 - [`eval/reports/generation_eval_v1.0.0.md`](eval/reports/generation_eval_v1.0.0.md)
 - [`eval/reports/manual_review_checklist_v1.0.0.csv`](eval/reports/manual_review_checklist_v1.0.0.csv)
 - [`corpus/SOURCES.md`](corpus/SOURCES.md)

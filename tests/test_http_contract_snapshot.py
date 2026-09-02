@@ -26,11 +26,26 @@ REQUEST_ID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
 # backward-compatible extensions; the snapshot file is NOT rewritten.
 PHASE3_ADDITIVE_KEYS = ("review_floor", "gate_band")
 
+# The P0 audit remediation adds source_type to each citation object, again
+# additively — the frozen snapshot recorded the legacy citation fields and
+# their values, not the absence of new ones. Checked explicitly in
+# test_citation_source_type_is_additive_and_present below.
+ADDITIVE_CITATION_KEYS = ("source_type",)
+
 
 def _project_legacy(response_json: dict) -> dict:
     if not isinstance(response_json, dict):
         return response_json
-    return {k: v for k, v in response_json.items() if k not in PHASE3_ADDITIVE_KEYS}
+    projected = {k: v for k, v in response_json.items() if k not in PHASE3_ADDITIVE_KEYS}
+    citations = projected.get("citations")
+    if isinstance(citations, list):
+        projected["citations"] = [
+            {k: v for k, v in citation.items() if k not in ADDITIVE_CITATION_KEYS}
+            if isinstance(citation, dict)
+            else citation
+            for citation in citations
+        ]
+    return projected
 
 
 def _project_case_legacy(case: dict) -> dict:
@@ -70,6 +85,7 @@ def _retrieval_result(chunk_id: str, semantic_score: float):
             "document_title": "Real Retrieved Title",
             "section_heading": "Real Section",
             "revision": "Rev Z",
+            "source_type": "public",
             "chunk_id": chunk_id,
             "chunk_text": "some real chunk text",
         },
@@ -289,3 +305,12 @@ def test_phase3_additive_fields_present_on_query_and_absent_on_health() -> None:
     # decision_reason is internal only — it must never reach the HTTP body
     for body in cases.values():
         assert "decision_reason" not in body
+
+
+def test_citation_source_type_is_additive_and_present() -> None:
+    cases = {case["case"]: case["response_json"] for case in _all_new_app_cases()}
+    citations = cases["query_confident"]["citations"]
+
+    assert citations, "the confident case must return at least one citation"
+    for citation in citations:
+        assert citation["source_type"] == "public"
