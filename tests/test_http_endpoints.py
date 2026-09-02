@@ -49,6 +49,7 @@ def _retrieval_result(chunk_id: str, semantic_score: float) -> RetrievalResult:
             "document_title": "Real Retrieved Title",
             "section_heading": "Real Section",
             "revision": "Rev Z",
+            "source_type": "public",
             "chunk_id": chunk_id,
             "chunk_text": "some real chunk text",
         },
@@ -241,3 +242,105 @@ def test_fastapi_does_not_duplicate_the_nginx_edge_security_headers(client):
     response = client.get("/health")
     assert "X-Frame-Options" not in response.headers
     assert "Content-Security-Policy" not in response.headers
+
+
+_SESSION_A = "11111111-1111-4111-8111-111111111111"
+_SESSION_B = "22222222-2222-4222-8222-222222222222"
+
+
+def _wire_answering_app(rate_limiter: RateLimiter) -> None:
+    settings = _settings()
+    retriever = InMemoryRetriever([_retrieval_result("chunk-abc", 0.9)])
+    llm = InMemoryLLMClient(response={"answer": "ok", "citations": [{"chunk_id": "chunk-abc"}], "refused": False})
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_query_use_case] = lambda: QueryUseCase(retriever, llm, settings)
+    app.dependency_overrides[get_rate_limiter] = lambda: rate_limiter
+
+
+def test_two_client_sessions_get_independent_rate_limit_budgets(client):
+    """nginx proxies the Streamlit WebSocket, not the question, so every
+    visitor's /query arrives from the same loopback peer. Keyed by address, one
+    visitor exhausting the budget would lock out everyone."""
+    _wire_answering_app(RateLimiter(max_requests=1))
+    payload = {"question": "What is the QC unit responsible for?", "language": "en"}
+
+    first_a = client.post("/query", json=payload, headers={"X-Client-Session": _SESSION_A})
+    second_a = client.post("/query", json=payload, headers={"X-Client-Session": _SESSION_A})
+    first_b = client.post("/query", json=payload, headers={"X-Client-Session": _SESSION_B})
+
+    assert first_a.status_code == 200
+    assert second_a.status_code == 429
+    assert first_b.status_code == 200
+
+
+def test_switching_language_does_not_reset_a_session_budget(client):
+    """The UI mints the session id once per browser session, not per widget
+    state — a per-language id would make the limit trivially evadable."""
+    _wire_answering_app(RateLimiter(max_requests=1))
+
+    first = client.post(
+        "/query",
+        json={"question": "What is the QC unit responsible for?", "language": "en"},
+        headers={"X-Client-Session": _SESSION_A},
+    )
+    second = client.post(
+        "/query",
+        json={"question": "¿De qué es responsable la unidad de control de calidad?", "language": "es"},
+        headers={"X-Client-Session": _SESSION_A},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+
+
+def test_missing_client_session_header_falls_back_to_peer_address(client):
+    """Backward compatibility for any internal caller that predates the header:
+    absent means "key by address", not "reject"."""
+    _wire_answering_app(RateLimiter(max_requests=1))
+    payload = {"question": "What is the QC unit responsible for?", "language": "en"}
+
+    first = client.post("/query", json=payload)
+    second = client.post("/query", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+
+
+def test_malformed_client_session_header_returns_400(client):
+    _wire_answering_app(RateLimiter(max_requests=100))
+
+    response = client.post(
+        "/query",
+        json={"question": "What is the QC unit responsible for?", "language": "en"},
+        headers={"X-Client-Session": "not-a-uuid"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_invalid_api_key_is_rejected_before_the_session_header_is_parsed(client):
+    """A caller without credentials must not be able to probe header handling."""
+    app.dependency_overrides[get_settings] = lambda: _settings(api_key="secret-key")
+    app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(max_requests=100)
+
+    response = client.post(
+        "/query",
+        json={"question": "What is the QC unit responsible for?", "language": "en"},
+        headers={"X-Client-Session": "not-a-uuid"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_rate_limit_log_line_never_carries_the_session_id(client, caplog):
+    _wire_answering_app(RateLimiter(max_requests=1))
+    payload = {"question": "What is the QC unit responsible for?", "language": "en"}
+    client.post("/query", json=payload, headers={"X-Client-Session": _SESSION_A})
+
+    with caplog.at_level("WARNING", logger="src.features.query.router"):
+        rejected = client.post("/query", json=payload, headers={"X-Client-Session": _SESSION_A})
+
+    assert rejected.status_code == 429
+    record = next(r for r in caplog.records if r.__dict__.get("event") == "rate_limit_exceeded")
+    assert record.__dict__["client_kind"] == "session"
+    assert _SESSION_A not in caplog.text

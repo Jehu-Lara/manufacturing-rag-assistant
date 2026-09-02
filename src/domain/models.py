@@ -91,6 +91,10 @@ class Citation:
     section_heading: str
     revision: str
     chunk_id: str
+    # Carried all the way to the HTTP body and the UI so a reader can tell a
+    # real regulatory source from a synthetic example without opening the
+    # corpus — the honesty guarantee the SPEC's data policy promises.
+    source_type: SourceType
 
 
 @dataclass(frozen=True)

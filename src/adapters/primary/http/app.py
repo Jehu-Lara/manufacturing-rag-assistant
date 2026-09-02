@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from src.adapters.primary.http.rate_limit import RateLimiter
 from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
 from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
-from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient
+from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient, log_llm_trace
 from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
 from src.core.config import load_settings
 from src.core.logging import configure as configure_logging
@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     lexical_index.validate([chunk.chunk_id for chunk in chunks])
 
     retriever = HybridRetriever(vector_store, lexical_index)
-    llm_client = GroqOpenAiLlmClient()
+    llm_client = GroqOpenAiLlmClient(trace_hook=log_llm_trace)
 
     app.state.settings = settings
     app.state.vector_store = vector_store

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -31,6 +32,7 @@ def _to_response_schema(answer: QueryAnswer) -> QueryResponse:
                 section_heading=c.section_heading,
                 revision=c.revision,
                 chunk_id=c.chunk_id,
+                source_type=c.source_type,
             )
             for c in answer.citations
         ],
@@ -43,6 +45,26 @@ def _to_response_schema(answer: QueryAnswer) -> QueryResponse:
         language=answer.language,
         request_id=answer.request_id,
     )
+
+
+def _rate_limit_key(session_id: Optional[str], http_request: Request) -> str:
+    """Prefers the UI-supplied browser-session id over the peer address. nginx
+    proxies the Streamlit WebSocket, not the question: each `/query` call
+    reaches FastAPI from the Streamlit process over loopback, so every public
+    visitor shares one peer address and an IP-keyed limiter would be a single
+    global bucket. The session id is validated as a UUID and used only as a
+    bucket label — never logged, never persisted, never echoed back."""
+    if session_id is not None:
+        try:
+            parsed = uuid.UUID(session_id)
+        except ValueError:
+            logger.warning(
+                "rejected request with a malformed client session header",
+                extra={"event": "invalid_client_session"},
+            )
+            raise HTTPException(status_code=400, detail="Invalid X-Client-Session header")
+        return f"session:{parsed}"
+    return f"host:{http_request.client.host if http_request.client else 'unknown'}"
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -83,15 +105,19 @@ async def query(
     settings: Settings = Depends(get_settings),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    x_client_session: Optional[str] = Header(default=None, alias="X-Client-Session"),
 ) -> QueryResponse:
     expected_api_key = settings.api_key.get_secret_value() if settings.api_key is not None else None
     if expected_api_key is not None and not secrets.compare_digest(x_api_key or "", expected_api_key):
         logger.warning("rejected request with missing or invalid API key", extra={"event": "invalid_api_key"})
         raise HTTPException(status_code=401, detail="Missing or invalid API key")
 
-    client_key = http_request.client.host if http_request.client else "unknown"
+    client_key = _rate_limit_key(x_client_session, http_request)
     if not rate_limiter.allow(client_key):
-        logger.warning("rate limit exceeded", extra={"event": "rate_limit_exceeded", "client": client_key})
+        logger.warning(
+            "rate limit exceeded",
+            extra={"event": "rate_limit_exceeded", "client_kind": client_key.split(":", 1)[0]},
+        )
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again shortly.")
 
     answer = await query_use_case.answer_question(request.question, request.language)

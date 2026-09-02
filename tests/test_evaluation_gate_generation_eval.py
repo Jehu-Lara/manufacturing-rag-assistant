@@ -44,6 +44,7 @@ def _result(chunk_id: str, score: float) -> RetrievalResult:
             "document_title": "T",
             "section_heading": "S",
             "revision": "A",
+            "source_type": "public",
             "chunk_text": _GREY_TEXT,
         },
     )

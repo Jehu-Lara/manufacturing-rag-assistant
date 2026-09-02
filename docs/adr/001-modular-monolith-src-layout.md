@@ -1,5 +1,11 @@
 # ADR-001: Modular monolith, `src/` layout with vertical slices
 
+## Status
+
+**Accepted.** In force. The `src/` layout, the framework-free `src/domain/`, and the
+import invariant that enforces it are all still the shipped architecture; the invariant
+test was extended (not relaxed) to cover `src/web/`'s HTTP-only boundary as well.
+
 ## Context
 
 The app grew phase-by-phase (ingestion → retrieval → generation → API/UI) as

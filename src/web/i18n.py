@@ -35,6 +35,14 @@ UI_LABELS: dict[str, dict[str, str]] = {
             "Do not enter confidential, personal, regulated, or proprietary information. "
             "Your question and retrieved context are sent to the configured external LLM provider."
         ),
+        # Shown on every answered response: the corpus mixes real regulatory
+        # text with clearly-labeled synthetic examples, and an answer here is
+        # a reading aid, never the controlling document on a plant floor.
+        "safety_notice": (
+            "AI-generated reference only. Verify against the controlling SOP and your "
+            "facility's lockout/tagout (LOTO) or energy-control procedure before acting."
+        ),
+        "synthetic_source_badge": "**[SYNTHETIC / EXAMPLE]**",
     },
     "es": {
         "title": "Asistente de Conocimiento de Manufactura",
@@ -66,6 +74,12 @@ UI_LABELS: dict[str, dict[str, str]] = {
             "No introduzca información confidencial, personal, regulada ni propietaria. "
             "Su pregunta y el contexto recuperado se envían al proveedor LLM externo configurado."
         ),
+        "safety_notice": (
+            "Referencia generada por IA únicamente. Verifique la respuesta contra el SOP "
+            "vigente y el procedimiento de bloqueo/etiquetado (LOTO) o control de energía "
+            "de su planta antes de actuar."
+        ),
+        "synthetic_source_badge": "**[SINTÉTICO / EJEMPLO]**",
     },
 }
 

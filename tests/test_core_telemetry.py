@@ -90,6 +90,7 @@ def test_query_use_case_creates_query_answer_question_span():
                     "document_title": "t",
                     "section_heading": "s",
                     "revision": "r",
+                    "source_type": "public",
                     "chunk_id": "c1",
                     "chunk_text": "text",
                 },

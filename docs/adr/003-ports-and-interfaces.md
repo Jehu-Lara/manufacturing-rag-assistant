@@ -1,5 +1,10 @@
 # ADR-003: Ports and interfaces at the domain boundary
 
+## Status
+
+**Accepted.** In force. The five `Protocol` ports and the port-fake testing convention
+they enable are still how every layer is wired and tested.
+
 ## Context
 
 Before this refactor, code called concrete modules directly —

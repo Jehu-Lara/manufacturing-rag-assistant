@@ -1,5 +1,15 @@
 # ADR-002: In-memory, per-process rate limiting
 
+## Status
+
+**Accepted, amended.** The in-memory, per-process, sliding-window limiter stands. What
+changed is the **key**, not the mechanism: the limiter is now keyed by a UI-minted
+per-browser-session UUID (`X-Client-Session`), falling back to the peer address when the
+header is absent. The address-keyed original collapsed every public visitor into one
+bucket, because nginx proxies the Streamlit WebSocket while each question reaches FastAPI
+from the Streamlit process over loopback. The single-process scope, and its consequence
+(no shared store, no cross-replica sync), are unchanged.
+
 ## Context
 
 `POST /query` needs basic abuse protection against a public demo endpoint.
