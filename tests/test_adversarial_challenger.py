@@ -127,24 +127,25 @@ def features_by_id() -> dict[str, FeatureRow]:
         for question in json.loads(REGRESSION_FILE.read_text(encoding="utf-8"))["queries"]
     }
     report = REGRESSION_REPORT_FILE.read_text(encoding="utf-8")
-    match = re.search(r"^\| r020 \| en \| False \| ([0-9.]+) \|", report, re.MULTILINE)
-    assert match is not None
-    r020 = regression_questions["r020"]
-    rows["r020"] = FeatureRow(
-        question_id="r020",
-        language=r020["language"],
-        answerable=r020["should_answer"],
-        cohort="regression_controls",
-        top1_semantic=float(match.group(1)),
-        sem_margin=None,
-        sem_top1_id=None,
-        bm25_top1_id=None,
-        expected_sem_rank=None,
-        expected_bm25_rank=None,
-        sem_bm25_top1_agree=False,
-        sem_top1_in_bm25_top_n=False,
-        channels_overlap_top_n=False,
-    )
+    for qid in ("r018", "r019", "r020"):
+        match = re.search(rf"^\| {qid} \| [a-z]+ \| False \| ([0-9.]+) \|", report, re.MULTILINE)
+        assert match is not None
+        q = regression_questions[qid]
+        rows[qid] = FeatureRow(
+            question_id=qid,
+            language=q["language"],
+            answerable=q["should_answer"],
+            cohort="regression_controls",
+            top1_semantic=float(match.group(1)),
+            sem_margin=None,
+            sem_top1_id=None,
+            bm25_top1_id=None,
+            expected_sem_rank=None,
+            expected_bm25_rank=None,
+            sem_bm25_top1_agree=False,
+            sem_top1_in_bm25_top_n=False,
+            channels_overlap_top_n=False,
+        )
     return rows
 
 
@@ -270,9 +271,9 @@ def test_gate_holdout_has_balanced_unanswerable_cohort() -> None:
 # 3. GATE BAND POLICY ROUTING & FAIL-CLOSED EVIDENCE VALIDATION
 # =========================================================================
 
-def test_control_routing_under_binary_policy() -> None:
+def test_control_routing_under_binary_policy(features_by_id: dict[str, FeatureRow]) -> None:
     """Under binary policy (threshold = 0.5999):
-    r018 (0.5630), r019 (0.5001), r020 (0.5420) must all be hard_refuse.
+    r018, r019, r020 parsed from committed evidence must all be hard_refuse.
     """
     policy_binary = RefusalPolicy(
         DEFAULT_REFUSAL_COSINE_THRESHOLD,
@@ -280,16 +281,16 @@ def test_control_routing_under_binary_policy() -> None:
         review_floor=DEFAULT_REFUSAL_REVIEW_FLOOR,
     )
 
-    assert policy_binary.classify_score(0.5630) == "hard_refuse"  # r018
-    assert policy_binary.classify_score(0.5001) == "hard_refuse"  # r019
-    assert policy_binary.classify_score(0.5420) == "hard_refuse"  # r020
+    assert policy_binary.classify_score(features_by_id["r018"].top1_semantic) == "hard_refuse"
+    assert policy_binary.classify_score(features_by_id["r019"].top1_semantic) == "hard_refuse"
+    assert policy_binary.classify_score(features_by_id["r020"].top1_semantic) == "hard_refuse"
 
 
-def test_control_routing_under_grounded_review_policy() -> None:
+def test_control_routing_under_grounded_review_policy(features_by_id: dict[str, FeatureRow]) -> None:
     """Under grounded_review policy (threshold = 0.5999, floor = 0.5500):
-    r018 (0.5630) -> grounded_review
-    r019 (0.5001) -> hard_refuse
-    r020 (0.5420) -> hard_refuse
+    r018 -> grounded_review
+    r019 -> hard_refuse
+    r020 -> hard_refuse
     """
     policy_review = RefusalPolicy(
         DEFAULT_REFUSAL_COSINE_THRESHOLD,
@@ -297,9 +298,9 @@ def test_control_routing_under_grounded_review_policy() -> None:
         review_floor=DEFAULT_REFUSAL_REVIEW_FLOOR,
     )
 
-    assert policy_review.classify_score(0.5630) == "grounded_review"  # r018
-    assert policy_review.classify_score(0.5001) == "hard_refuse"      # r019
-    assert policy_review.classify_score(0.5420) == "hard_refuse"      # r020
+    assert policy_review.classify_score(features_by_id["r018"].top1_semantic) == "grounded_review"
+    assert policy_review.classify_score(features_by_id["r019"].top1_semantic) == "hard_refuse"
+    assert policy_review.classify_score(features_by_id["r020"].top1_semantic) == "hard_refuse"
 
 
 def test_r018_grounded_review_fail_closed_rejection() -> None:

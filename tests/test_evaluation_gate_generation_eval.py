@@ -545,3 +545,36 @@ def test_run_end_to_end_with_injected_fakes(tmp_path: Path):
     gge.import_verdicts_into_run(run_dir)
     assert json.loads((run_dir / "run_manifest.json").read_text())["verdicts_imported"] is True
     assert "citation=" in (run_dir / "comparison.md").read_text()
+    assert (run_dir / "checksums.import.txt").exists()
+
+
+def test_repeats_conform_gate_requires_full_and_canary_repeats():
+    canary = [_outcome(repeat=1)]
+    holdout = [_outcome(repeat=1)]
+    gates = {g.name: g for g in gge.evaluate_gates(holdout, canary)}
+    assert gates["repeats_conform"].passed is False
+    assert "needs 3" in gates["repeats_conform"].detail
+
+    canary_full = [_outcome(repeat=r) for r in (1, 2, 3)]
+    holdout_full = [_outcome(repeat=r) for r in (1, 2, 3)]
+    gates_full = {g.name: g for g in gge.evaluate_gates(holdout_full, canary_full)}
+    assert gates_full["repeats_conform"].passed is True
+
+
+def test_import_verdicts_rejects_tampered_immutable_file(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "outcomes.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "retrieval.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "blind_checklist.baseline.json").write_text("{}", encoding="utf-8")
+    (run_dir / "arm_map.sealed.json").write_text("{}", encoding="utf-8")
+    (run_dir / "run_manifest.json").write_text("{}", encoding="utf-8")
+    (run_dir / "blind_checklist.csv").write_text("a,b\n", encoding="utf-8")
+    checksums = "\n".join(f"{gge._sha256_file(p)}  {p.name}" for p in sorted(run_dir.iterdir()))
+    (run_dir / "checksums.txt").write_text(checksums + "\n", encoding="utf-8")
+
+    (run_dir / "outcomes.jsonl").write_text("tampered\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="tampered"):
+        gge.import_verdicts_into_run(run_dir)
+

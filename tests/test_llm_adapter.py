@@ -362,6 +362,20 @@ def test_trace_hook_counts_failed_physical_attempts(mock_groq_cls, mock_openai_c
 
 
 @patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+def test_unconfigured_primary_does_not_emit_provider_fallback(mock_openai_cls):
+    mock_openai_cls.return_value = _async_client_with_create(_response_with_usage(VALID_JSON_TEXT))
+    events = []
+    settings = _settings("groq").model_copy(update={"groq_api_key": None})
+    _run(
+        GroqOpenAiLlmClient(trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA, settings
+        )
+    )
+    fallbacks = [e for e in events if e.event == "provider_fallback"]
+    assert len(fallbacks) == 0
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
 @patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
 def test_trace_hook_counts_schema_fallback_as_two_attempts(mock_groq_cls, mock_openai_cls):
     mock_groq_cls.return_value = _async_client_with_create(
