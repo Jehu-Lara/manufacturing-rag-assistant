@@ -25,9 +25,15 @@ guard and adds this ADR; Phase 3A.2 makes the holdout guard pair-aware. Phase 3B
 is set, and the default flip stays gated on the Phase 3C holdout run. Phase 3C
 (§"Measurement" below) adds the runner, guards and provider hooks needed for
 that run; it does not itself flip anything. As of 2026-09-01 the 48-question
-holdout is owner-approved, frozen and profiled (§4, §"Closure order" step 2); the
-paid `gate_generation_eval` run and the ship decision remain open, so this ADR
-stays **Proposed** and the shipped default stays `binary`.
+holdout was owner-approved, frozen and profiled (§4, §"Closure order" step 2).
+On 2026-09-02, an initial exploratory single-repeat pilot (`gate_generation_eval_20260902T225839Z`)
+was run on Groq `openai/gpt-oss-120b`, demonstrating a reduction in false refusal
+from 33.3% to 8.3% and 0 unanswerable queries answered (report: `docs/eval/gate-generation-pilot-20260902.md`).
+However, because the pilot experienced 429 rate limits (39 affected outcomes), was run
+with only a single repeat rather than the preregistered 3-repeat protocol, and blind
+checklist grading is still pending, release gates were not passed. The final 3-repeat
+confirmatory evaluation and explicit owner approval remain required; this ADR stays
+**Proposed** and the shipped default strictly remains `binary`.
 
 ## Context
 
