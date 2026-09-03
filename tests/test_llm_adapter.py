@@ -353,9 +353,11 @@ def test_trace_hook_counts_failed_physical_attempts(mock_groq_cls, mock_openai_c
     attempts = [e for e in events if e.event == "physical_attempt"]
     failed = [e for e in events if e.event == "physical_failed"]
     succeeded = [e for e in events if e.event == "physical_request"]
+    fallbacks = [e for e in events if e.event == "provider_fallback"]
     assert len(attempts) == 5  # 4 groq + 1 openai
     assert len(failed) == 4 and all(e.provider == "groq" for e in failed)
     assert len(succeeded) == 1 and succeeded[0].provider == "openai"
+    assert len(fallbacks) == 1 and fallbacks[0].provider == "openai"
     assert all(e.latency_ms is not None for e in failed + succeeded)
 
 

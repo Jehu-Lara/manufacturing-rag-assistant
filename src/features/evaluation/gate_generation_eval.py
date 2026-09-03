@@ -101,7 +101,7 @@ class TraceCollector:
 
     @property
     def provider_fallbacks(self) -> int:
-        return self._count("provider_call_failed", "generation_exhausted")
+        return self._count("provider_fallback")
 
     @property
     def total_tokens(self) -> int:
@@ -621,7 +621,7 @@ def evaluate_gates(
                 f"canary_answers_and_cites[{qid}]",
                 ok,
                 f"{len(answered_ok)}/{len(hits)} answered, {len(cited_ok)}/{len(hits)} cite expected chunk "
-                "(entailment still needs blind grading)",
+                f"(gate requires {CANARY_REPEATS}/{CANARY_REPEATS}; entailment still needs blind grading)",
             )
         )
     for qid in CANARY_MUST_REFUSE:
@@ -631,7 +631,7 @@ def evaluate_gates(
             GateResult(
                 f"canary_refuses[{qid}]",
                 len(hits) == CANARY_REPEATS and refused == CANARY_REPEATS,
-                f"{refused}/{len(hits)} refused",
+                f"{refused}/{len(hits)} refused (gate requires {CANARY_REPEATS}/{CANARY_REPEATS})",
             )
         )
 

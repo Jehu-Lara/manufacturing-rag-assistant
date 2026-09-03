@@ -331,6 +331,14 @@ class GroqOpenAiLlmClient:
                 )
                 attempts_summary.append(f"{provider}: not configured")
                 continue
+            if provider != primary:
+                self._emit(
+                    LlmTraceEvent(
+                        event="provider_fallback",
+                        provider=provider,
+                        phase="initial",
+                    )
+                )
             logger.info(
                 "attempting structured generation",
                 extra={"provider": provider, "role": "primary" if provider == primary else "fallback"},
