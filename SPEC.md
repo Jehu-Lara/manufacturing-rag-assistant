@@ -301,15 +301,15 @@ A calibration grid sweep was executed to explore whether the pre-registered revi
   - 6 candidate floors: `[0.50, 0.51, 0.52, 0.53, 0.54, 0.55]`
   - 4 agreement signals: `none`, `sem_top1_in_bm25_top_n`, `sem_bm25_top1_agree`, and `channels_overlap_top_n`
 - **Global Evaluation Gates (`assess_rule` in `src/features/evaluation/floor_sweep.py`):**
-  - **G1 (baseline fidelity):** verifies that under the baseline rule `(0.5500, "none")`, candidate classification reproduces canonical `RefusalPolicy` exactly.
+  - **G1 (baseline fidelity):** verifies that classifying rows under the baseline rule `(0.5500, "none")` reproduces canonical `RefusalPolicy` exactly (evaluates identical PASS for all candidates).
   - **G2 (false-refusal reduction):** candidate wrongly hard-refused answerables in `eval_set` must strictly decrease in at least one language and not worsen in any language compared to baseline.
   - **G3 (unanswerable containment):** newly reviewed unanswerables in `eval_set` must be $\le 2$ pooled and $\le 1$ per language.
   - **G4 (regression controls):** all pinned controls (`r001`, `r002`, `r018` $\to$ `grounded_review`; `r019`, `r020` $\to$ `hard_refuse`) must match, no previously-admitted answerable control may be hard refused, and no previously-refused unanswerable control may leave `hard_refuse`.
 - **Findings:**
   - **0 of 24 candidate rules** proved mechanically eligible.
   - Every candidate rule fails at least one global gate (G2, G3, or G4):
-    - Candidate floors below 0.5500 either fail unanswerable containment G3 (e.g., floors $\le 0.53$ admit excessive newly reviewed unanswerables like `q093`) or fail regression control invariants G4 (for example, `(0.54, none)` and `(0.54, channels_overlap_top_n)` pass G2 and G3, but fail G4 because `r020` at 0.5420 leaks out of `hard_refuse`).
-    - Combining floors with lexical agreement signals fails G2 (no false-refusal reduction) due to cross-lingual lexical asymmetry: Spanish queries against the English-only corpus generate zero BM25 lexical overlap, causing asymmetric failure on Spanish answerables.
+    - With signal `none`, floors below 0.5500 either fail G3 ($\le 0.53$: 3–6 newly-reviewed unanswerables incl. `q093`) or fail G4 (`(0.54, none)`: `r020` at 0.5420 enters `grounded_review`).
+    - Lexical signals never yield eligibility: `sem_top1_in_bm25_top_n` and `sem_bm25_top1_agree` fail G2 at every floor (no false-refusal reduction — ES queries get zero BM25 overlap); `channels_overlap_top_n` preserves G2 below 0.55 but fails G3 ($\le 0.53$) or G4 (0.54, again via `r020`).
   - **Outcome:** Validated the pre-registered floor of `0.5500` as the Pareto-optimal invariant. A formal "diagnóstico sin cambio" (no-op) was reached with **zero production code changes**. Full provenance and table: [`docs/eval/floor_sweep_summary.md`](docs/eval/floor_sweep_summary.md).
 
 ---
