@@ -322,6 +322,7 @@ class GroqOpenAiLlmClient:
         providers = (primary, fallback) if self._allow_provider_fallback else (primary,)
         attempts_summary: list[str] = []
 
+        attempted_any = False
         for provider in providers:
             api_key = _api_key_for(provider, settings)
             if api_key is None:
@@ -331,6 +332,15 @@ class GroqOpenAiLlmClient:
                 )
                 attempts_summary.append(f"{provider}: not configured")
                 continue
+            if attempted_any:
+                self._emit(
+                    LlmTraceEvent(
+                        event="provider_fallback",
+                        provider=provider,
+                        phase="initial",
+                    )
+                )
+            attempted_any = True
             logger.info(
                 "attempting structured generation",
                 extra={"provider": provider, "role": "primary" if provider == primary else "fallback"},

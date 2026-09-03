@@ -145,6 +145,16 @@ def test_trace_collector_counts_all_physical_attempts_and_latency():
     assert sorted(tc.llm_latencies_ms) == [5.0, 9.0]
 
 
+def test_trace_collector_distinguishes_provider_failure_from_actual_fallback():
+    tc = gge.TraceCollector()
+    tc(LlmTraceEvent(event="provider_call_failed", provider="groq", phase="initial"))
+    tc(LlmTraceEvent(event="generation_exhausted", provider="groq", phase="terminal"))
+    assert tc.provider_fallbacks == 0
+
+    tc(LlmTraceEvent(event="provider_fallback", provider="openai", phase="initial"))
+    assert tc.provider_fallbacks == 1
+
+
 # --- capture_snapshots ---------------------------------------------------
 
 
@@ -255,6 +265,25 @@ def test_canary_gate_requires_expected_chunk_citation():
     gates = {g.name: g for g in gge.evaluate_gates([], canary_good + canary_bad)}
     assert gates["canary_answers_and_cites[r001]"].passed is True
     assert gates["canary_answers_and_cites[r002]"].passed is False
+
+
+def test_canary_gate_explains_pilot_repeat_shortfall():
+    canary = [
+        _outcome(
+            policy="grounded_review",
+            question_id=qid,
+            answerable=False,
+            refused=True,
+            repeat=1,
+        )
+        for qid in gge.CANARY_MUST_REFUSE
+    ]
+    gates = {g.name: g for g in gge.evaluate_gates([], canary)}
+
+    for qid in gge.CANARY_MUST_REFUSE:
+        gate = gates[f"canary_refuses[{qid}]"]
+        assert gate.passed is False
+        assert "gate requires 3/3" in gate.detail
 
 
 def test_gates_resolve_with_imported_human_verdicts():
@@ -516,3 +545,36 @@ def test_run_end_to_end_with_injected_fakes(tmp_path: Path):
     gge.import_verdicts_into_run(run_dir)
     assert json.loads((run_dir / "run_manifest.json").read_text())["verdicts_imported"] is True
     assert "citation=" in (run_dir / "comparison.md").read_text()
+    assert (run_dir / "checksums.import.txt").exists()
+
+
+def test_repeats_conform_gate_requires_full_and_canary_repeats():
+    canary = [_outcome(repeat=1)]
+    holdout = [_outcome(repeat=1)]
+    gates = {g.name: g for g in gge.evaluate_gates(holdout, canary)}
+    assert gates["repeats_conform"].passed is False
+    assert "needs 3" in gates["repeats_conform"].detail
+
+    canary_full = [_outcome(repeat=r) for r in (1, 2, 3)]
+    holdout_full = [_outcome(repeat=r) for r in (1, 2, 3)]
+    gates_full = {g.name: g for g in gge.evaluate_gates(holdout_full, canary_full)}
+    assert gates_full["repeats_conform"].passed is True
+
+
+def test_import_verdicts_rejects_tampered_immutable_file(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "outcomes.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "retrieval.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "blind_checklist.baseline.json").write_text("{}", encoding="utf-8")
+    (run_dir / "arm_map.sealed.json").write_text("{}", encoding="utf-8")
+    (run_dir / "run_manifest.json").write_text("{}", encoding="utf-8")
+    (run_dir / "blind_checklist.csv").write_text("a,b\n", encoding="utf-8")
+    checksums = "\n".join(f"{gge._sha256_file(p)}  {p.name}" for p in sorted(run_dir.iterdir()))
+    (run_dir / "checksums.txt").write_text(checksums + "\n", encoding="utf-8")
+
+    (run_dir / "outcomes.jsonl").write_text("tampered\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="tampered"):
+        gge.import_verdicts_into_run(run_dir)
+

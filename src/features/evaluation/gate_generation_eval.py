@@ -101,7 +101,7 @@ class TraceCollector:
 
     @property
     def provider_fallbacks(self) -> int:
-        return self._count("provider_call_failed", "generation_exhausted")
+        return self._count("provider_fallback")
 
     @property
     def total_tokens(self) -> int:
@@ -534,6 +534,7 @@ def evaluate_gates(
     holdout: list[QuestionOutcome],
     canary: list[QuestionOutcome],
     verdicts: Optional[HumanVerdicts] = None,
+    manifest: Optional[dict[str, Any]] = None,
 ) -> list[GateResult]:
     gates: list[GateResult] = []
     every = holdout + canary
@@ -621,7 +622,7 @@ def evaluate_gates(
                 f"canary_answers_and_cites[{qid}]",
                 ok,
                 f"{len(answered_ok)}/{len(hits)} answered, {len(cited_ok)}/{len(hits)} cite expected chunk "
-                "(entailment still needs blind grading)",
+                f"(gate requires {CANARY_REPEATS}/{CANARY_REPEATS}; entailment still needs blind grading)",
             )
         )
     for qid in CANARY_MUST_REFUSE:
@@ -631,7 +632,7 @@ def evaluate_gates(
             GateResult(
                 f"canary_refuses[{qid}]",
                 len(hits) == CANARY_REPEATS and refused == CANARY_REPEATS,
-                f"{refused}/{len(hits)} refused",
+                f"{refused}/{len(hits)} refused (gate requires {CANARY_REPEATS}/{CANARY_REPEATS})",
             )
         )
 
@@ -654,6 +655,25 @@ def evaluate_gates(
                 f"over {verdicts.graded_rows} graded rows",
             )
         )
+
+    full_repeats = (
+        manifest["full_repeats"]
+        if manifest and "full_repeats" in manifest
+        else len({r.repeat for r in holdout}) if holdout else 0
+    )
+    canary_repeats = (
+        manifest["canary_repeats"]
+        if manifest and "canary_repeats" in manifest
+        else len({r.repeat for r in canary}) if canary else 0
+    )
+    repeats_ok = full_repeats == FULL_REPEATS and canary_repeats == CANARY_REPEATS
+    gates.append(
+        GateResult(
+            "repeats_conform",
+            repeats_ok,
+            f"holdout x{full_repeats} (needs {FULL_REPEATS}), canary x{canary_repeats} (needs {CANARY_REPEATS})",
+        )
+    )
     return gates
 
 
@@ -917,8 +937,6 @@ def run(
     holdout_outcomes = run_matrix(holdout_questions, holdout_replay, settings, llm_factory, repeats=full_repeats)
     canary_outcomes = run_matrix(canary_questions, canary_replay, settings, llm_factory, repeats=canary_repeats)
 
-    gates = evaluate_gates(holdout_outcomes, canary_outcomes)
-
     stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
     run_id = f"gate_generation_eval_{stamp}"
     arm_map = {label: policy for policy, label in _arm_labels(run_id).items()}
@@ -946,6 +964,8 @@ def run(
         "holdout_sha256": holdout_data["sha256"],
         "holdout_question_count": len(holdout_questions),
     }
+
+    gates = evaluate_gates(holdout_outcomes, canary_outcomes, manifest=manifest)
     run_dir = write_run_dir(
         out_root,
         run_id=run_id,
@@ -965,8 +985,34 @@ def run(
 
 def import_verdicts_into_run(run_dir: Path) -> Path:
     """Re-grade the gates that need the human blind review and rewrite
-    comparison.md in place (checksums.txt regenerated). The raw run files are
+    comparison.md in place (checksums.import.txt generated). The raw run files are
     not touched."""
+    checksums_file = run_dir / "checksums.txt"
+    if checksums_file.exists():
+        sealed_hashes: dict[str, str] = {}
+        for line in checksums_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                sealed_hashes[parts[1]] = parts[0]
+        immutable_files = (
+            "outcomes.jsonl",
+            "retrieval.jsonl",
+            "blind_checklist.baseline.json",
+            "arm_map.sealed.json",
+        )
+        for immutable_name in immutable_files:
+            target_path = run_dir / immutable_name
+            if target_path.exists() and immutable_name in sealed_hashes:
+                actual_hash = _sha256_file(target_path)
+                if actual_hash != sealed_hashes[immutable_name]:
+                    raise ValueError(
+                        f"{immutable_name} hash {actual_hash} mismatch against sealed checksums.txt "
+                        f"{sealed_hashes[immutable_name]} - the run directory was tampered with"
+                    )
+
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     outcomes_raw = [
         json.loads(line) for line in (run_dir / "outcomes.jsonl").read_text(encoding="utf-8").splitlines()
@@ -987,7 +1033,7 @@ def import_verdicts_into_run(run_dir: Path) -> Path:
             f"blind checklist has {verdicts.unsafe_unanswerable_rows} answered-unanswerable row(s) but "
             f"outcomes.jsonl has {runner_unsafe} - the checklist was tampered with"
         )
-    gates = evaluate_gates(holdout, canary, verdicts)
+    gates = evaluate_gates(holdout, canary, verdicts, manifest=manifest)
     manifest["verdicts_imported"] = True
     (run_dir / "run_manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -998,10 +1044,12 @@ def import_verdicts_into_run(run_dir: Path) -> Path:
     (run_dir / "comparison.md").write_text(
         render_comparison(manifest, snapshots, holdout, canary, gates), encoding="utf-8"
     )
-    checksums = "\n".join(
-        f"{_sha256_file(p)}  {p.name}" for p in sorted(run_dir.iterdir()) if p.name != "checksums.txt"
-    )
-    (run_dir / "checksums.txt").write_text(checksums + "\n", encoding="utf-8")
+    imported_checksums = [
+        f"{_sha256_file(p)}  {p.name}"
+        for p in sorted(run_dir.iterdir())
+        if p.name not in ("checksums.txt", "checksums.import.txt")
+    ]
+    (run_dir / "checksums.import.txt").write_text("\n".join(imported_checksums) + "\n", encoding="utf-8")
     for gate in gates:
         print(f"  [{'PASS' if gate.passed else 'FAIL'}] {gate.name}: {gate.detail}")
     return run_dir

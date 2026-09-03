@@ -353,10 +353,26 @@ def test_trace_hook_counts_failed_physical_attempts(mock_groq_cls, mock_openai_c
     attempts = [e for e in events if e.event == "physical_attempt"]
     failed = [e for e in events if e.event == "physical_failed"]
     succeeded = [e for e in events if e.event == "physical_request"]
+    fallbacks = [e for e in events if e.event == "provider_fallback"]
     assert len(attempts) == 5  # 4 groq + 1 openai
     assert len(failed) == 4 and all(e.provider == "groq" for e in failed)
     assert len(succeeded) == 1 and succeeded[0].provider == "openai"
+    assert len(fallbacks) == 1 and fallbacks[0].provider == "openai"
     assert all(e.latency_ms is not None for e in failed + succeeded)
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+def test_unconfigured_primary_does_not_emit_provider_fallback(mock_openai_cls):
+    mock_openai_cls.return_value = _async_client_with_create(_response_with_usage(VALID_JSON_TEXT))
+    events = []
+    settings = _settings("groq").model_copy(update={"groq_api_key": None})
+    _run(
+        GroqOpenAiLlmClient(trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA, settings
+        )
+    )
+    fallbacks = [e for e in events if e.event == "provider_fallback"]
+    assert len(fallbacks) == 0
 
 
 @patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
