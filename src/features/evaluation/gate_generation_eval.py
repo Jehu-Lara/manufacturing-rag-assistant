@@ -38,6 +38,7 @@ from src.features.evaluation.gate_eval.artifacts import (
     write_run_dir,
 )
 from src.features.evaluation.gate_eval.models import (
+    _PHYSICAL_EVENTS,
     _POLICIES,
     CANARY_MUST_ANSWER,
     CANARY_MUST_REFUSE,
@@ -62,6 +63,7 @@ from src.features.evaluation.gate_eval.models import (
 # artifact contract are unchanged.
 from src.features.evaluation.gate_eval.runner import (
     _lang,
+    _run_question,
     _use_case,
     capture_snapshots,
     run_matrix,
@@ -102,6 +104,8 @@ __all__ = [
     "_checklist_rows",
     "_finalize_dir",
     "_percentiles",
+    "_PHYSICAL_EVENTS",
+    "_run_question",
     "_schema_key",
     "_sha256_file",
     "_write_checklist",

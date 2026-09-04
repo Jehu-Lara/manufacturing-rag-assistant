@@ -109,3 +109,12 @@ def test_facade_is_a_wiring_file_and_no_module_is_oversized() -> None:
         if len(p.read_text(encoding="utf-8").splitlines()) > 450
     }
     assert not oversized, f"gate_eval modules still too large: {oversized}"
+
+
+def test_facade_resolves_every_name_it_advertises() -> None:
+    """__all__ is the facade's compatibility promise. A re-export that gets
+    pruned or renamed during a future split has to fail here, not in whatever
+    sealed-run tooling reaches for it months later."""
+    unresolved = [name for name in gge.__all__ if not hasattr(gge, name)]
+
+    assert not unresolved, f"advertised but missing from the facade: {unresolved}"
