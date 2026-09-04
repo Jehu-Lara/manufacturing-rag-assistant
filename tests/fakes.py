@@ -30,7 +30,7 @@ class InMemoryLLMClient:
         self._error = error
 
     async def generate_structured(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Any
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
         if self._error is not None:
             raise self._error
@@ -75,7 +75,7 @@ class InMemoryVectorStore:
     def __init__(self, ready: bool = True) -> None:
         self._ready = ready
 
-    def build_collection(self, chunks: list[Any]) -> None:
+    def build_collection(self, chunks: list[Any], embedding_inputs: list[str]) -> None:
         raise NotImplementedError
 
     def query(self, text: str, top_n: int) -> list[tuple[str, float, dict[str, Any]]]:

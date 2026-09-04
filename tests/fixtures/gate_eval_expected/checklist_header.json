@@ -1,0 +1,18 @@
+[
+  "row_id",
+  "arm",
+  "repeat",
+  "question_id",
+  "language",
+  "answerable",
+  "refused",
+  "answer",
+  "cited_chunk_ids",
+  "cited_chunk_texts",
+  "expected_answer",
+  "expected_chunk_ids",
+  "citation_accuracy_pass",
+  "faithfulness_pass",
+  "safe_pass",
+  "notes"
+]

@@ -42,7 +42,7 @@ graph LR
     end
 
     subgraph primary["src/adapters/primary/http/"]
-        router["src/features/query/router.py"]
+        router["src/adapters/primary/http/routes.py"]
         appfactory["app.py — create_app(), lifespan"]
     end
 

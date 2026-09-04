@@ -1,0 +1,10 @@
+[
+  "arm_map.sealed.json",
+  "blind_checklist.baseline.json",
+  "blind_checklist.csv",
+  "checksums.txt",
+  "comparison.md",
+  "outcomes.jsonl",
+  "retrieval.jsonl",
+  "run_manifest.json"
+]

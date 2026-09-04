@@ -15,7 +15,7 @@ class RateLimiter:
     every public visitor reaches the API over loopback from the same Streamlit
     process, so an IP-derived key would put all of them in one bucket; the
     router therefore prefers a per-browser-session key (see
-    `src.features.query.router._rate_limit_key`)."""
+    `src.adapters.primary.http.routes._rate_limit_key`)."""
 
     def __init__(
         self,

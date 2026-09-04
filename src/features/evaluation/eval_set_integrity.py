@@ -6,10 +6,12 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from src.core.paths import EVAL_DIR
+
 # eval_set.json stays at its original eval/ location, byte-unchanged — a
 # golden dataset is data, not application code, and isn't packaged into the
 # installable wheel under src/ (Resolved Decision #12).
-EVAL_SET_FILE = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "eval_set.json"
+EVAL_SET_FILE = EVAL_DIR / "eval_set.json"
 
 
 def canonical_questions_bytes(questions: list[dict[str, Any]]) -> bytes:

@@ -33,3 +33,6 @@ Thumbs.db
 
 # Tool cache artifacts, not project content
 .firecrawl/
+
+# Experiment-only indexes (audit bucket 5) — never served, never committed.
+retrieval/output/experiments/

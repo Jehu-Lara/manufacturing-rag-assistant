@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from src.adapters.secondary.lexical.bm25_lexical_index import BM25_SCHEMA_VERSION, LEXICAL_PROFILE
 from src.core.config import DEFAULT_REFUSAL_COSINE_THRESHOLD, DEFAULT_REFUSAL_REVIEW_FLOOR
 from src.domain.models import RetrievalResult
 from src.features.evaluation import floor_sweep as fs
@@ -74,6 +75,8 @@ def _manifest() -> index_manifest.IndexManifest:
         embedding_revision="revision",
         build_commit="c" * 40,
         chunk_count=228,
+        lexical_profile=LEXICAL_PROFILE,
+        bm25_schema_version=BM25_SCHEMA_VERSION,
     )
 
 

@@ -53,11 +53,16 @@ def test_lifespan_wires_fail_fast_llm_backoff(monkeypatch: pytest.MonkeyPatch):
     captured: dict[str, object] = {}
     real_client_cls = app_module.GroqOpenAiLlmClient
 
-    def _recording(*args: object, **kwargs: object):
-        captured.update(kwargs)
-        return real_client_cls(*args, **kwargs)
+    class _Recording(real_client_cls):  # type: ignore[misc, valid-type]
+        """A subclass, not a plain function: lifespan constructs the client
+        through the `from_settings` classmethod, which a function stand-in
+        would not carry."""
 
-    monkeypatch.setattr(app_module, "GroqOpenAiLlmClient", _recording)
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+            super().__init__(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(app_module, "GroqOpenAiLlmClient", _Recording)
 
     with TestClient(app_module.create_app()):
         pass

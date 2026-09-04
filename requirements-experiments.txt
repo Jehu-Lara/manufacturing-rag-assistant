@@ -1,0 +1,11 @@
+# Experiment-only dependencies (audit bucket 5).
+#
+# NEVER installed into the deploy image and NEVER hashed into
+# requirements-lock.txt: nothing here reaches production. Shipping any of it
+# would need its own decision plus a lock regenerated in a Debian Bookworm
+# amd64 / Python 3.11 container — never a local Windows `pip freeze`.
+#
+# Install locally with:  pip install -r requirements-experiments.txt
+#
+# Bilingual EN+ES stemming for the hybrid_snowball_bilingual ablation arm.
+snowballstemmer

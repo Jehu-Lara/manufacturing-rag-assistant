@@ -6,14 +6,18 @@ from typing import Any, cast
 import chromadb
 
 from src.domain.models import ChunkMetadata, IndexProfile
+from src.domain.policies import embedding_input
 from src.domain.ports import EmbedderPort
 
 COLLECTION_NAME = "manufacturing_chunks"
 
 
 def contextual_embedding_input(chunk: ChunkMetadata) -> str:
-    """The one place the contextual-v1 heading prefix is written (ASCII `>`)."""
-    return f"{chunk.document_title} > {chunk.section_heading}\n\n{chunk.chunk_text}"
+    """Deprecated shim — the policy moved to src.domain.policies.embedding_input
+    so a second vector store could not silently disagree with this one about
+    what contextual-v1 means. Kept for one release because tests and external
+    readers import it from here."""
+    return embedding_input(chunk, "contextual-v1")
 
 
 class ChromaVectorStore:
@@ -50,13 +54,15 @@ class ChromaVectorStore:
             del metadata["source_page_range"]
         return metadata
 
-    def build_collection(self, chunks: list[ChunkMetadata]) -> None:
+    def build_collection(self, chunks: list[ChunkMetadata], embedding_inputs: list[str]) -> None:
+        """A writer, not a policy holder: it embeds the strings the caller
+        computed (src.domain.policies.embedding_inputs) and stores the raw
+        chunk_text regardless of profile (ADR-008)."""
+        if len(embedding_inputs) != len(chunks):
+            raise ValueError(
+                f"embedding_inputs has {len(embedding_inputs)} entries, expected {len(chunks)}"
+            )
         client = self._client()
-
-        if self._index_profile == "contextual-v1":
-            embedding_inputs = [contextual_embedding_input(chunk) for chunk in chunks]
-        else:
-            embedding_inputs = [chunk.chunk_text for chunk in chunks]
 
         # Validate + embed BEFORE any collection is created/deleted/renamed, so
         # a length or model failure leaves the live collection untouched.

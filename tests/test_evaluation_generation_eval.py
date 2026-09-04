@@ -181,7 +181,7 @@ class _ScriptedLlmClient:
         self._by_question = by_question
         self._last_user_prompt: str = ""
 
-    async def generate_structured(self, system_prompt, user_prompt, schema, settings):
+    async def generate_structured(self, system_prompt, user_prompt, schema):
         self._last_user_prompt = user_prompt
         for question_text, payload in self._by_question.items():
             if question_text in user_prompt:
@@ -350,10 +350,10 @@ class _FailingThenScriptedRetriever(_ScriptedRetriever):
 
 
 class _FailingThenScriptedLlmClient(_ScriptedLlmClient):
-    async def generate_structured(self, system_prompt, user_prompt, schema, settings):
+    async def generate_structured(self, system_prompt, user_prompt, schema):
         if "answerable question one" in user_prompt:
             raise RuntimeError("simulated transient network error")
-        return await super().generate_structured(system_prompt, user_prompt, schema, settings)
+        return await super().generate_structured(system_prompt, user_prompt, schema)
 
 
 @patch("src.features.evaluation.generation_eval.artifacts.resolve_provenance")

@@ -9,21 +9,21 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, cast
 
+from src.core.paths import CHUNKS_FILE, EVAL_DIR
 from src.features.evaluation import eval_set_integrity, regression_set_integrity
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-# Same path as src.features.retrieval.index_manifest.CHUNKS_FILE, redefined
-# locally so the integrity guard never pulls in the embedder import chain.
-CHUNKS_FILE = _REPO_ROOT / "ingestion" / "output" / "chunks.jsonl"
-EVAL_SET_FILE = _REPO_ROOT / "eval" / "eval_set.json"
-REGRESSION_SET_FILE = _REPO_ROOT / "eval" / "regression_queries.json"
+# CHUNKS_FILE comes from src.core.paths, which imports nothing but pathlib —
+# so this guard still never pulls in the embedder import chain, the reason it
+# used to redefine the path locally.
+EVAL_SET_FILE = EVAL_DIR / "eval_set.json"
+REGRESSION_SET_FILE = EVAL_DIR / "regression_queries.json"
 
 # gate_holdout_v1.0.0.json stays at eval/ alongside eval_set.json and
 # regression_queries.json — a frozen holdout is data, not application code, and
 # is never packaged under src/ (mirrors eval_set_integrity /
 # regression_set_integrity). The hash is over the parsed `questions`, not raw
 # bytes, so reformatting the file without touching content keeps it valid.
-GATE_HOLDOUT_FILE = _REPO_ROOT / "eval" / "gate_holdout_v1.0.0.json"
+GATE_HOLDOUT_FILE = EVAL_DIR / "gate_holdout_v1.0.0.json"
 
 REQUIRED_TOTAL = 48
 REQUIRED_PER_CLASS = 24

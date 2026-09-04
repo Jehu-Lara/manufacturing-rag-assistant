@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.adapters.secondary.lexical.bm25_lexical_index import BM25_SCHEMA_VERSION, LEXICAL_PROFILE
 from src.features.evaluation import _eval_retriever
 from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.retrieval import index_manifest
@@ -16,6 +17,8 @@ def _fake_manifest(profile: str) -> index_manifest.IndexManifest:
         embedding_revision="r",
         build_commit="c",
         chunk_count=1,
+        lexical_profile=LEXICAL_PROFILE,
+        bm25_schema_version=BM25_SCHEMA_VERSION,
     )
 
 
@@ -70,8 +73,8 @@ class _StubBm25:
     def __init__(self, *args: object, **kwargs: object) -> None:
         self.validated: object = None
 
-    def validate(self, expected_chunk_ids: list[str]) -> None:
-        self.validated = expected_chunk_ids
+    def validate(self, expected_chunk_ids: list[str], **kwargs: object) -> None:
+        self.validated = (expected_chunk_ids, kwargs)
 
 
 def _patch_build_happy_path(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
@@ -85,7 +88,7 @@ def _patch_build_happy_path(monkeypatch: pytest.MonkeyPatch) -> dict[str, object
         _eval_retriever, "HybridRetriever", lambda vs, li, expansion_mode="off": ("retriever", expansion_mode)
     )
     monkeypatch.setattr(
-        _eval_retriever.index_manifest, "resolve_index_profile", lambda: "contextual-v1"
+        _eval_retriever.index_manifest, "resolve_index_profile", lambda *_: "contextual-v1"
     )
     monkeypatch.setattr(
         _eval_retriever.index_manifest,
@@ -129,7 +132,7 @@ def test_build_retriever_propagates_bm25_validation_failure(monkeypatch: pytest.
     _patch_build_happy_path(monkeypatch)
 
     class _BadBm25(_StubBm25):
-        def validate(self, expected_chunk_ids: list[str]) -> None:
+        def validate(self, expected_chunk_ids: list[str], **kwargs: object) -> None:
             raise RuntimeError("BM25 chunk ids do not match the indexed chunks")
 
     monkeypatch.setattr(_eval_retriever, "Bm25LexicalIndex", _BadBm25)

@@ -208,7 +208,7 @@ class QueryUseCase:
         # switch — "one call" is the gate's contract, not a network guarantee.
         try:
             llm_result = await self._llm_client.generate_structured(
-                system_prompt, user_prompt, schema, self._settings
+                system_prompt, user_prompt, schema
             )
         except GenerationError as exc:
             logger.error(

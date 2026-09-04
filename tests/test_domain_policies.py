@@ -4,13 +4,15 @@ import logging
 
 import pytest
 
-from src.domain.models import Citation, RetrievalResult
+from src.domain.models import ChunkMetadata, Citation, RetrievalResult
 from src.domain.policies import (
     GLOSSARY,
     RRF_K,
     CitationResolver,
     GroundedEvidenceResolver,
     RefusalPolicy,
+    embedding_input,
+    embedding_inputs,
     expand_query,
     fuse_rankings,
     is_confident,
@@ -392,3 +394,48 @@ def test_glossary_spanish_renderings_nonempty_and_distinct():
         es = expansions[1]
         assert es.strip()
         assert es.lower() != expansions[0].lower()
+
+
+# --- embedding-input policy (moved out of the Chroma adapter, bucket 3) ---
+
+
+def _embed_chunk(**overrides: str) -> ChunkMetadata:
+    fields = dict(
+        chunk_id="doc-a::chunk-0000",
+        document_id="doc-a",
+        document_title="Doc A",
+        revision="Rev A",
+        section_heading="4.2 Cleaning",
+        source_type="synthetic",
+        source_url_or_note="note",
+        source_page_range=None,
+        md_line_range="1-2",
+        chunk_token_count=3,
+        chunk_text="Body text.",
+    )
+    fields.update(overrides)
+    return ChunkMetadata(**fields)
+
+
+def test_contextual_embedding_input_is_the_byte_stable_prefix() -> None:
+    """This string IS the definition of contextual-v1 (ADR-008): an ASCII '>',
+    one space either side, a blank line, then the raw chunk text. Changing it
+    silently invalidates the live index and every __contextual-v1__ report."""
+    assert embedding_input(_embed_chunk(), "contextual-v1") == "Doc A > 4.2 Cleaning\n\nBody text."
+
+
+def test_raw_profile_embeds_the_bare_body() -> None:
+    assert embedding_input(_embed_chunk(), "raw-v1") == "Body text."
+
+
+def test_embedding_inputs_preserves_order() -> None:
+    chunks = [_embed_chunk(chunk_text=t) for t in ("one", "two", "three")]
+
+    assert embedding_inputs(chunks, "raw-v1") == ["one", "two", "three"]
+
+
+def test_unknown_profile_raises_rather_than_defaulting() -> None:
+    """No silent fallback: an unrecognised profile must not quietly embed the
+    raw body and produce an index that claims to be something else."""
+    with pytest.raises(ValueError, match="index profile"):
+        embedding_input(_embed_chunk(), "contextual-v2")  # type: ignore[arg-type]

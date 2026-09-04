@@ -1,32 +1,19 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, SentenceTransformersEmbedder
-from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
+from src.adapters.secondary.lexical.bm25_lexical_index import LEXICAL_PROFILE, Bm25LexicalIndex
 from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
 from src.core.config import load_settings
-from src.domain.models import ChunkMetadata
+from src.domain.policies import embedding_inputs
 from src.features.retrieval import index_manifest
+from src.features.retrieval.chunk_store import CHUNKS_FILE, load_chunks
 
-CHUNKS_FILE = Path(__file__).resolve().parent.parent.parent.parent / "ingestion" / "output" / "chunks.jsonl"
-
-
-def load_chunks(path: Path = CHUNKS_FILE) -> list[ChunkMetadata]:
-    if not path.exists():
-        raise FileNotFoundError(f"{path} not found — run `python -m src.features.ingestion.cli` first to produce it")
-    chunks = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            chunks.append(ChunkMetadata(**json.loads(line)))
-    return chunks
+__all__ = ["CHUNKS_FILE", "load_chunks", "run"]
 
 
 def run() -> None:
-    profile = index_manifest.resolve_index_profile()
-
     settings = load_settings()
+    profile = index_manifest.resolve_index_profile(settings)
     chunks = load_chunks()
 
     embedder = SentenceTransformersEmbedder()
@@ -34,17 +21,25 @@ def run() -> None:
     vector_store = ChromaVectorStore(persist_dir=settings.chroma_path, embedder=embedder, index_profile=profile)
     lexical_index = Bm25LexicalIndex(persist_path=settings.bm25_path)
 
-    vector_store.build_collection(chunks)
-    lexical_index.build_index(chunks)
+    # One digest for both artifacts, so the BM25 payload and the manifest can
+    # never disagree about which chunks.jsonl this index was built from.
+    digest = index_manifest.chunks_sha256()
 
-    manifest = index_manifest.build_manifest(profile, len(chunks))
-    index_manifest.write(manifest)
+    vector_store.build_collection(chunks, embedding_inputs(chunks, profile))
+    lexical_index.build_index(chunks, chunks_sha256=digest)
+
+    # The manifest is written LAST, as the commit marker: its presence asserts
+    # that both artifacts were built and promoted. Writing it earlier would let
+    # a BM25 failure leave a manifest describing an index that does not exist.
+    # On failure the previous manifest stays, so verify() fails loudly at the
+    # next startup instead of half-passing.
+    index_manifest.write(index_manifest.build_manifest(profile, len(chunks)))
 
     print(f"Index profile: {profile}")
     print(f"Chunks embedded: {len(chunks)}")
     print(f"Embedding model: {MODEL_NAME} (max_seq_length={embedder.max_seq_length()})")
     print(f"Vector store: {settings.chroma_path}")
-    print(f"BM25 index: {settings.bm25_path}")
+    print(f"BM25 index: {settings.bm25_path} (lexical_profile={LEXICAL_PROFILE})")
     print(f"Index manifest: {index_manifest.MANIFEST_FILE}")
 
 

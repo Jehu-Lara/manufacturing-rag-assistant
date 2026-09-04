@@ -6,7 +6,7 @@ from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
 from src.core.config import load_settings
 from src.domain.models import ExpansionMode, IndexProfile
 from src.features.retrieval import index_manifest
-from src.features.retrieval.cli import load_chunks
+from src.features.retrieval.chunk_store import load_chunks
 from src.features.retrieval.use_cases import HybridRetriever
 
 
@@ -22,7 +22,7 @@ def build_retriever(
     collection and lexical index physically disagree on profile, count or
     model. Disabled only where the caller has already run the check."""
     settings = load_settings()
-    profile: IndexProfile = expected_profile or index_manifest.resolve_index_profile()
+    profile: IndexProfile = expected_profile or index_manifest.resolve_index_profile(settings)
 
     embedder = SentenceTransformersEmbedder()
     vector_store = ChromaVectorStore(
@@ -36,7 +36,14 @@ def build_retriever(
         vector_store.validate_collection(
             expected_profile=profile, expected_count=manifest.chunk_count
         )
-        lexical_index.validate(chunk_ids)
+        # Identical to the cross-check src.adapters.primary.http.app.lifespan
+        # runs, deliberately: no eval runner may measure an index whose three
+        # artifacts physically disagree on profile, count, model OR content.
+        lexical_index.validate(
+            chunk_ids,
+            expected_chunks_sha256=manifest.chunks_sha256,
+            expected_lexical_profile=manifest.lexical_profile,
+        )
 
     return HybridRetriever(vector_store, lexical_index, expansion_mode=expansion_mode)
 

@@ -12,6 +12,7 @@ import pytest
 
 from src.adapters.secondary.vector.chroma_vector_store import COLLECTION_NAME, ChromaVectorStore
 from src.domain.models import ChunkMetadata
+from src.domain.policies import embedding_inputs
 from tests.fakes import RecordingEmbedder
 
 
@@ -53,6 +54,15 @@ def _expected_contextual(chunk: ChunkMetadata) -> str:
     return f"{chunk.document_title} > {chunk.section_heading}\n\n{chunk.chunk_text}"
 
 
+
+def _build(store: ChromaVectorStore, chunks: list[ChunkMetadata]) -> None:
+    """Mirrors what src.features.retrieval.cli.run now does: the CALLER computes
+    the embedding inputs from the domain policy for the store's profile, and the
+    adapter just writes them. Keeps every test below asserting the same thing it
+    asserted when the policy lived inside build_collection."""
+    store.build_collection(chunks, embedding_inputs(chunks, store._index_profile))
+
+
 def _store(tmp_path, embedder: RecordingEmbedder, profile: str | None = None) -> ChromaVectorStore:
     kwargs = {} if profile is None else {"index_profile": profile}
     return ChromaVectorStore(
@@ -74,7 +84,7 @@ def _collection_names(client) -> set[str]:
 def test_contextual_v1_embeds_heading_prefixed_strings_in_id_order(tmp_path):
     embedder = RecordingEmbedder()
 
-    _store(tmp_path, embedder, profile="contextual-v1").build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, embedder, profile="contextual-v1"), FIXTURE_CHUNKS)
 
     assert embedder.embed_texts_calls == [[_expected_contextual(c) for c in FIXTURE_CHUNKS]]
 
@@ -82,7 +92,7 @@ def test_contextual_v1_embeds_heading_prefixed_strings_in_id_order(tmp_path):
 def test_raw_v1_embeds_unprefixed_chunk_text_bodies(tmp_path):
     embedder = RecordingEmbedder()
 
-    _store(tmp_path, embedder, profile="raw-v1").build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, embedder, profile="raw-v1"), FIXTURE_CHUNKS)
 
     assert embedder.embed_texts_calls == [[c.chunk_text for c in FIXTURE_CHUNKS]]
     for recorded in embedder.embed_texts_calls[0]:
@@ -92,7 +102,7 @@ def test_raw_v1_embeds_unprefixed_chunk_text_bodies(tmp_path):
 def test_default_profile_is_raw_v1(tmp_path):
     embedder = RecordingEmbedder()
 
-    _store(tmp_path, embedder).build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, embedder), FIXTURE_CHUNKS)
 
     assert embedder.embed_texts_calls == [[c.chunk_text for c in FIXTURE_CHUNKS]]
     collection = _client(tmp_path).get_collection(COLLECTION_NAME)
@@ -103,7 +113,7 @@ def test_default_profile_is_raw_v1(tmp_path):
 def test_stored_document_and_metadata_are_byte_identical_raw_text(tmp_path, profile):
     embedder = RecordingEmbedder()
 
-    _store(tmp_path, embedder, profile=profile).build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, embedder, profile=profile), FIXTURE_CHUNKS)
 
     collection = _client(tmp_path).get_collection(COLLECTION_NAME)
     stored = collection.get(
@@ -121,7 +131,7 @@ def test_stored_document_and_metadata_are_byte_identical_raw_text(tmp_path, prof
 def test_assert_fits_max_seq_length_receives_contextual_inputs_for_contextual_v1(tmp_path):
     embedder = RecordingEmbedder()
 
-    _store(tmp_path, embedder, profile="contextual-v1").build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, embedder, profile="contextual-v1"), FIXTURE_CHUNKS)
 
     assert embedder.assert_fits_calls == [[_expected_contextual(c) for c in FIXTURE_CHUNKS]]
 
@@ -129,16 +139,16 @@ def test_assert_fits_max_seq_length_receives_contextual_inputs_for_contextual_v1
 def test_assert_fits_max_seq_length_receives_raw_bodies_for_raw_v1(tmp_path):
     embedder = RecordingEmbedder()
 
-    _store(tmp_path, embedder, profile="raw-v1").build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, embedder, profile="raw-v1"), FIXTURE_CHUNKS)
 
     assert embedder.assert_fits_calls == [[c.chunk_text for c in FIXTURE_CHUNKS]]
 
 
 def test_failed_candidate_build_leaves_live_collection_queryable_and_unchanged(tmp_path):
-    _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, RecordingEmbedder()), FIXTURE_CHUNKS)
 
     with pytest.raises(RuntimeError):
-        _store(tmp_path, RecordingEmbedder(fail_on_embed=True)).build_collection(FIXTURE_CHUNKS)
+        _build(_store(tmp_path, RecordingEmbedder(fail_on_embed=True)), FIXTURE_CHUNKS)
 
     live = _client(tmp_path).get_collection(COLLECTION_NAME)
     stored = live.get(ids=[c.chunk_id for c in FIXTURE_CHUNKS], include=["documents"])
@@ -153,7 +163,7 @@ def test_stale_candidate_collection_is_discarded_before_new_build(tmp_path):
     )
     stale.add(ids=["stale::9999"], embeddings=[[0.0, 0.0]], documents=["stale candidate row"])
 
-    _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, RecordingEmbedder()), FIXTURE_CHUNKS)
 
     names = _collection_names(_client(tmp_path))
     assert f"{COLLECTION_NAME}__candidate" not in names
@@ -163,7 +173,7 @@ def test_stale_candidate_collection_is_discarded_before_new_build(tmp_path):
 
 
 def test_promote_rename_failure_restores_live_collection_from_previous(tmp_path, monkeypatch):
-    _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS[:1])
+    _build(_store(tmp_path, RecordingEmbedder()), FIXTURE_CHUNKS[:1])
 
     real_promote = ChromaVectorStore._promote
 
@@ -177,7 +187,7 @@ def test_promote_rename_failure_restores_live_collection_from_previous(tmp_path,
     monkeypatch.setattr(ChromaVectorStore, "_promote", promote_with_failing_candidate_rename)
 
     with pytest.raises(RuntimeError):
-        _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS)
+        _build(_store(tmp_path, RecordingEmbedder()), FIXTURE_CHUNKS)
 
     client = _client(tmp_path)
     live = client.get_collection(COLLECTION_NAME)
@@ -188,19 +198,19 @@ def test_promote_rename_failure_restores_live_collection_from_previous(tmp_path,
     # the orphaned __candidate is intentionally left for the next build's
     # stale-candidate sweep — a subsequent successful build clears everything.
     monkeypatch.setattr(ChromaVectorStore, "_promote", real_promote)
-    _store(tmp_path, RecordingEmbedder()).build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, RecordingEmbedder()), FIXTURE_CHUNKS)
     assert _collection_names(_client(tmp_path)) == {COLLECTION_NAME}
 
 
 def test_validate_collection_passes_for_matching_profile_and_count(tmp_path):
-    _store(tmp_path, RecordingEmbedder(), profile="contextual-v1").build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, RecordingEmbedder(), profile="contextual-v1"), FIXTURE_CHUNKS)
     _store(tmp_path, RecordingEmbedder(), profile="contextual-v1").validate_collection(
         expected_profile="contextual-v1", expected_count=len(FIXTURE_CHUNKS)
     )
 
 
 def test_validate_collection_rejects_profile_mismatch(tmp_path):
-    _store(tmp_path, RecordingEmbedder(), profile="raw-v1").build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, RecordingEmbedder(), profile="raw-v1"), FIXTURE_CHUNKS)
     with pytest.raises(RuntimeError, match="index_profile"):
         _store(tmp_path, RecordingEmbedder(), profile="contextual-v1").validate_collection(
             expected_profile="contextual-v1", expected_count=len(FIXTURE_CHUNKS)
@@ -208,7 +218,7 @@ def test_validate_collection_rejects_profile_mismatch(tmp_path):
 
 
 def test_validate_collection_rejects_count_mismatch(tmp_path):
-    _store(tmp_path, RecordingEmbedder(), profile="raw-v1").build_collection(FIXTURE_CHUNKS)
+    _build(_store(tmp_path, RecordingEmbedder(), profile="raw-v1"), FIXTURE_CHUNKS)
     with pytest.raises(RuntimeError, match="rows"):
         _store(tmp_path, RecordingEmbedder(), profile="raw-v1").validate_collection(
             expected_profile="raw-v1", expected_count=99
@@ -217,11 +227,31 @@ def test_validate_collection_rejects_count_mismatch(tmp_path):
 
 def test_successful_rebuild_swaps_cleanly_leaving_no_side_collections(tmp_path):
     store = _store(tmp_path, RecordingEmbedder())
-    store.build_collection(FIXTURE_CHUNKS[:1])
-    store.build_collection(FIXTURE_CHUNKS)
+    _build(store, FIXTURE_CHUNKS[:1])
+    _build(store, FIXTURE_CHUNKS)
 
     client = _client(tmp_path)
     assert _collection_names(client) == {COLLECTION_NAME}
     live = client.get_collection(COLLECTION_NAME)
     assert live.count() == len(FIXTURE_CHUNKS)
     assert live.metadata.get("index_profile") == "raw-v1"
+
+
+def test_build_collection_embeds_exactly_what_it_is_given(tmp_path):
+    """The adapter is a writer, not a policy holder: it embeds the strings the
+    caller computed and stores the raw chunk_text regardless (ADR-008)."""
+    embedder = RecordingEmbedder()
+    store = _store(tmp_path, embedder, profile="contextual-v1")
+    given = [f"GIVEN-{i}" for i in range(len(FIXTURE_CHUNKS))]
+
+    store.build_collection(FIXTURE_CHUNKS, given)
+
+    assert embedder.embed_texts_calls[-1] == given
+    assert embedder.assert_fits_calls[-1] == given
+
+
+def test_build_collection_rejects_a_length_mismatch(tmp_path):
+    store = _store(tmp_path, RecordingEmbedder(), profile="raw-v1")
+
+    with pytest.raises(ValueError, match="embedding_inputs"):
+        store.build_collection(FIXTURE_CHUNKS, ["only-one"])

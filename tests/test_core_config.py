@@ -134,3 +134,55 @@ def test_binary_policy_ignores_a_high_floor(monkeypatch):
     monkeypatch.setenv("REFUSAL_COSINE_THRESHOLD", "0.5999")
     settings = load_settings()
     assert settings.refusal_review_floor == 0.9
+
+
+def test_index_profile_defaults_to_contextual_v1(monkeypatch):
+    monkeypatch.delenv("INDEX_PROFILE", raising=False)
+    assert load_settings().index_profile == "contextual-v1"
+
+
+def test_index_profile_is_env_overridable_to_the_rollback_profile(monkeypatch):
+    monkeypatch.setenv("INDEX_PROFILE", "raw-v1")
+    assert load_settings().index_profile == "raw-v1"
+
+
+def test_invalid_index_profile_raises_at_load(monkeypatch):
+    monkeypatch.setenv("INDEX_PROFILE", "contextual-v2")
+    with pytest.raises(ValueError, match="INDEX_PROFILE"):
+        load_settings()
+
+
+def test_deployed_sha_and_otlp_endpoint_default_to_none(monkeypatch):
+    monkeypatch.delenv("DEPLOYED_SHA", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    settings = load_settings()
+    assert settings.deployed_sha is None
+    assert settings.otlp_endpoint is None
+
+
+def test_deployed_sha_and_otlp_endpoint_are_read_from_env(monkeypatch):
+    monkeypatch.setenv("DEPLOYED_SHA", "a" * 40)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317")
+    settings = load_settings()
+    assert settings.deployed_sha == "a" * 40
+    assert settings.otlp_endpoint == "http://collector:4317"
+
+
+def test_config_index_profile_literal_matches_the_domain_one():
+    """Two structurally identical Literals, deliberately not shared: src/core
+    must not import src/domain. This pins them together so they cannot drift."""
+    from typing import get_args
+
+    from src.core.config import IndexProfileName
+    from src.domain.models import IndexProfile
+
+    assert set(get_args(IndexProfileName)) == set(get_args(IndexProfile))
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_non_positive_rate_limit_raises_at_load(monkeypatch, value):
+    """A limiter with max_requests <= 0 rejects every request: the container
+    boots, reports healthy, and answers 429 to everyone. Fail at startup."""
+    monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", value)
+    with pytest.raises(ValueError, match="RATE_LIMIT_PER_MINUTE"):
+        load_settings()

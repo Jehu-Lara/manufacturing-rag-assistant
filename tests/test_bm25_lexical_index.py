@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import json
 
-from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
+import pytest
+
+from src.adapters.secondary.lexical.bm25_lexical_index import (
+    BM25_SCHEMA_VERSION,
+    LEXICAL_PROFILE,
+    Bm25LexicalIndex,
+)
 from src.domain.models import ChunkMetadata
 
 
@@ -26,7 +32,10 @@ def test_build_index_persists_plain_json_not_pickle(tmp_path):
     persist_path = tmp_path / "bm25_index.json"
     index = Bm25LexicalIndex(persist_path)
 
-    index.build_index([_chunk("chunk-1", "lockout tagout safety procedure"), _chunk("chunk-2", "quality control unit")])
+    index.build_index(
+        [_chunk("chunk-1", "lockout tagout safety procedure"), _chunk("chunk-2", "quality control unit")],
+        chunks_sha256="deadbeef",
+    )
 
     raw = persist_path.read_text(encoding="utf-8")
     data = json.loads(raw)  # would raise if it were pickle bytes, not JSON
@@ -41,7 +50,8 @@ def test_query_ranks_matching_document_first(tmp_path):
         [
             _chunk("chunk-lockout", "lockout tagout safety procedure for machinery"),
             _chunk("chunk-quality", "quality control unit responsibilities"),
-        ]
+        ],
+        chunks_sha256="test",
     )
 
     results = index.query("lockout tagout", top_n=2)
@@ -51,7 +61,7 @@ def test_query_ranks_matching_document_first(tmp_path):
 
 def test_query_loads_from_a_fresh_instance_pointed_at_the_same_file(tmp_path):
     persist_path = tmp_path / "bm25_index.json"
-    Bm25LexicalIndex(persist_path).build_index([_chunk("chunk-1", "lockout tagout safety")])
+    Bm25LexicalIndex(persist_path).build_index([_chunk("chunk-1", "lockout tagout safety")], chunks_sha256="test")
 
     fresh_index = Bm25LexicalIndex(persist_path)
     results = fresh_index.query("lockout", top_n=1)
@@ -73,7 +83,8 @@ def test_query_raises_file_not_found_with_helpful_message_when_never_built(tmp_p
 def test_validate_passes_when_chunk_ids_match(tmp_path):
     persist_path = tmp_path / "bm25_index.json"
     Bm25LexicalIndex(persist_path).build_index(
-        [_chunk("chunk-1", "alpha"), _chunk("chunk-2", "beta")]
+        [_chunk("chunk-1", "alpha"), _chunk("chunk-2", "beta")],
+        chunks_sha256="test",
     )
     Bm25LexicalIndex(persist_path).validate(["chunk-1", "chunk-2"])
 
@@ -81,7 +92,8 @@ def test_validate_passes_when_chunk_ids_match(tmp_path):
 def test_validate_raises_when_chunk_ids_diverge(tmp_path):
     persist_path = tmp_path / "bm25_index.json"
     Bm25LexicalIndex(persist_path).build_index(
-        [_chunk("chunk-1", "alpha"), _chunk("chunk-2", "beta")]
+        [_chunk("chunk-1", "alpha"), _chunk("chunk-2", "beta")],
+        chunks_sha256="test",
     )
     import pytest
 
@@ -95,3 +107,79 @@ def test_no_pickle_import_in_module_source():
     with open(module.__file__, encoding="utf-8") as f:
         source = f.read()
     assert "pickle" not in source
+
+
+# --- versioned payload (bucket 3) ---
+
+
+def test_persisted_payload_is_versioned(tmp_path):
+    path = tmp_path / "bm25.json"
+    index = Bm25LexicalIndex(path)
+
+    index.build_index([_chunk("chunk-1", "alpha"), _chunk("chunk-2", "beta")], chunks_sha256="deadbeef")
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == BM25_SCHEMA_VERSION
+    assert payload["lexical_profile"] == LEXICAL_PROFILE
+    assert payload["chunks_sha256"] == "deadbeef"
+    assert payload["chunk_ids"] == ["chunk-1", "chunk-2"]
+
+
+def test_unversioned_legacy_payload_fails_closed(tmp_path):
+    """A pre-versioning index on disk is not silently readable: it was built by
+    an unknown tokenizer against an unknown chunk set."""
+    path = tmp_path / "bm25.json"
+    path.write_text(json.dumps({"chunk_ids": ["a"], "corpus_tokens": [["a"]]}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="schema_version"):
+        Bm25LexicalIndex(path).query("a", 1)
+
+
+def test_future_schema_version_fails_closed(tmp_path):
+    path = tmp_path / "bm25.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": BM25_SCHEMA_VERSION + 1,
+                "lexical_profile": LEXICAL_PROFILE,
+                "chunks_sha256": "x",
+                "chunk_ids": ["a"],
+                "corpus_tokens": [["a"]],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="schema_version"):
+        Bm25LexicalIndex(path).query("a", 1)
+
+
+def test_validate_rejects_a_chunks_hash_mismatch(tmp_path):
+    """The three artifacts must agree on CONTENT, not just on count: a BM25
+    index whose chunks_sha256 differs from the manifest's is scoring a
+    different corpus than the vector channel."""
+    path = tmp_path / "bm25.json"
+    index = Bm25LexicalIndex(path)
+    index.build_index([_chunk("chunk-1", "alpha")], chunks_sha256="aaaa")
+
+    with pytest.raises(RuntimeError, match="chunks_sha256"):
+        index.validate(["chunk-1"], expected_chunks_sha256="bbbb")
+
+
+def test_validate_rejects_a_lexical_profile_mismatch(tmp_path):
+    path = tmp_path / "bm25.json"
+    index = Bm25LexicalIndex(path)
+    index.build_index([_chunk("chunk-1", "alpha")], chunks_sha256="aaaa")
+
+    with pytest.raises(RuntimeError, match="lexical_profile"):
+        index.validate(
+            ["chunk-1"], expected_chunks_sha256="aaaa", expected_lexical_profile="snowball-bilingual-v1"
+        )
+
+
+def test_validate_accepts_a_coherent_index(tmp_path):
+    path = tmp_path / "bm25.json"
+    index = Bm25LexicalIndex(path)
+    index.build_index([_chunk("chunk-1", "alpha")], chunks_sha256="aaaa")
+
+    index.validate(["chunk-1"], expected_chunks_sha256="aaaa")

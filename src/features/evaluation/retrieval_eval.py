@@ -7,14 +7,14 @@ from typing import Any
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME
 from src.core.config import DEFAULT_REFUSAL_COSINE_THRESHOLD
+from src.core.paths import EVAL_REPORTS_DIR, REPO_ROOT
 from src.domain.models import ExpansionMode, IndexProfile, RetrievalResult
 from src.domain.policies import RefusalPolicy
 from src.features.evaluation import artifacts, eval_set_integrity, metrics
 from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
-REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+REPORT_DIR = EVAL_REPORTS_DIR
 
 
 def _git_commit_hash() -> str:

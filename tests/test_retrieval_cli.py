@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 import src.features.retrieval.cli as cli_module
 from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
 from src.adapters.secondary.vector.chroma_vector_store import contextual_embedding_input
+from src.core.config import load_settings as real_load_settings
 from src.domain.models import ChunkMetadata
 from src.features.retrieval import index_manifest
 from src.features.retrieval.cli import load_chunks
@@ -74,15 +73,16 @@ class _SpyVectorStore:
         self.built_chunks: list[ChunkMetadata] | None = None
         _SpyVectorStore.instances.append(self)
 
-    def build_collection(self, chunks: list[ChunkMetadata]) -> None:
+    def build_collection(self, chunks: list[ChunkMetadata], embedding_inputs: list[str]) -> None:
         self.built_chunks = list(chunks)
+        self.embedding_inputs = list(embedding_inputs)
 
 
 class _SpyLexical:
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
 
-    def build_index(self, chunks: list[ChunkMetadata]) -> None:
+    def build_index(self, chunks: list[ChunkMetadata], *, chunks_sha256: str) -> None:
         pass
 
 
@@ -96,10 +96,16 @@ def _patch_cli(monkeypatch, tmp_path):
     _SpyVectorStore.instances = []
     written: list[_StubManifest] = []
     embedder = RecordingEmbedder()
+    # A real Settings with only the paths redirected, not a SimpleNamespace:
+    # INDEX_PROFILE is now read and validated inside load_settings(), so the
+    # profile tests below (including the invalid-profile one) must go through
+    # the real loader to still be testing anything.
     monkeypatch.setattr(
         cli_module,
         "load_settings",
-        lambda: SimpleNamespace(chroma_path=tmp_path / "chroma", bm25_path=tmp_path / "bm25_index.json"),
+        lambda: real_load_settings().model_copy(
+            update={"chroma_path": tmp_path / "chroma", "bm25_path": tmp_path / "bm25_index.json"}
+        ),
     )
     monkeypatch.setattr(cli_module, "load_chunks", lambda: list(_CLI_FIXTURE_CHUNKS))
     monkeypatch.setattr(cli_module, "SentenceTransformersEmbedder", lambda: embedder)

@@ -6,9 +6,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import EVAL_REPORTS_DIR
 from src.features.evaluation import artifacts
 
-REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
+REPORT_DIR = EVAL_REPORTS_DIR
 
 CLASSES: tuple[str, ...] = (
     "gate-over-refusal",

@@ -8,8 +8,14 @@ from typing import Literal, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, SecretStr
 
+from src.core.paths import REPO_ROOT, RETRIEVAL_OUTPUT_DIR
+
 LlmProvider = Literal["groq", "openai"]
 RefusalPolicyName = Literal["binary", "grounded_review"]
+# Structurally identical to src.domain.models.IndexProfile, deliberately not
+# shared: src/core must not import src/domain. tests/test_core_config.py pins
+# the two together so they cannot drift.
+IndexProfileName = Literal["raw-v1", "contextual-v1"]
 
 # Overridden from the threshold_analysis.py-selected 0.5599 — see SPEC.md's
 # Phase 3 status note for why (Step 2's tie-break objective and Step 6's
@@ -32,15 +38,19 @@ _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_RATE_LIMIT_PER_MINUTE = 20
 _DEFAULT_CORS_ALLOW_ORIGINS: tuple[str, ...] = ()
 
-# Repo root, used only to compute default index paths below when CHROMA_PATH/
-# BM25_PATH aren't set — same physical retrieval/output/ location the old
-# retrieval/build_index.py always wrote to, so an already-built index keeps
-# working through the src/ migration without requiring new env vars. The
-# BM25 filename is .json, not .pkl: see src/adapters/secondary/lexical (no
-# pickle in runtime code, ADR-004).
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-_DEFAULT_CHROMA_PATH = _REPO_ROOT / "retrieval" / "output" / "chroma"
-_DEFAULT_BM25_PATH = _REPO_ROOT / "retrieval" / "output" / "bm25_index.json"
+# contextual-v1 is the shipped default (ADR-008); raw-v1 is the tested rollback
+# path, which is why this one IS env-overridable — unlike expansion_mode, which
+# is deliberately not a Settings field so production stays hard-wired to "off".
+_VALID_INDEX_PROFILES: tuple[IndexProfileName, ...] = ("raw-v1", "contextual-v1")
+_DEFAULT_INDEX_PROFILE: IndexProfileName = "contextual-v1"
+
+# Default index paths, used only when CHROMA_PATH/BM25_PATH aren't set — same
+# physical retrieval/output/ location the old retrieval/build_index.py always
+# wrote to, so an already-built index keeps working through the src/ migration
+# without requiring new env vars. The BM25 filename is .json, not .pkl: see
+# src/adapters/secondary/lexical (no pickle in runtime code, ADR-004).
+_DEFAULT_CHROMA_PATH = RETRIEVAL_OUTPUT_DIR / "chroma"
+_DEFAULT_BM25_PATH = RETRIEVAL_OUTPUT_DIR / "bm25_index.json"
 
 
 class Settings(BaseModel):
@@ -67,10 +77,13 @@ class Settings(BaseModel):
     cors_allow_origins: list[str] = list(_DEFAULT_CORS_ALLOW_ORIGINS)
     chroma_path: Path = _DEFAULT_CHROMA_PATH
     bm25_path: Path = _DEFAULT_BM25_PATH
+    index_profile: IndexProfileName = _DEFAULT_INDEX_PROFILE
+    deployed_sha: Optional[str] = None
+    otlp_endpoint: Optional[str] = None
 
 
 def load_settings() -> Settings:
-    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+    env_path = REPO_ROOT / ".env"
     if env_path.exists():
         load_dotenv(dotenv_path=env_path)
 
@@ -134,6 +147,12 @@ def load_settings() -> Settings:
             rate_limit_per_minute = int(rate_limit_raw)
         except ValueError as exc:
             raise ValueError(f"RATE_LIMIT_PER_MINUTE must be an int, got {rate_limit_raw!r}") from exc
+    # A limiter built with max_requests <= 0 rejects every request, so the
+    # container would boot, report healthy, and answer 429 to everyone.
+    if rate_limit_per_minute <= 0:
+        raise ValueError(
+            f"RATE_LIMIT_PER_MINUTE must be a positive int, got {rate_limit_per_minute!r}"
+        )
 
     api_key_raw = os.environ.get("API_KEY") or None
     api_key = SecretStr(api_key_raw) if api_key_raw is not None else None
@@ -151,6 +170,16 @@ def load_settings() -> Settings:
     bm25_path_raw = os.environ.get("BM25_PATH")
     bm25_path = Path(bm25_path_raw) if bm25_path_raw else _DEFAULT_BM25_PATH
 
+    index_profile_raw = os.environ.get("INDEX_PROFILE", _DEFAULT_INDEX_PROFILE)
+    if index_profile_raw not in _VALID_INDEX_PROFILES:
+        raise ValueError(
+            f"INDEX_PROFILE must be one of {_VALID_INDEX_PROFILES}, got {index_profile_raw!r}"
+        )
+    index_profile: IndexProfileName = index_profile_raw
+
+    deployed_sha = os.environ.get("DEPLOYED_SHA") or None
+    otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or None
+
     return Settings(
         groq_api_key=groq_api_key,
         openai_api_key=openai_api_key,
@@ -164,4 +193,7 @@ def load_settings() -> Settings:
         cors_allow_origins=cors_allow_origins,
         chroma_path=chroma_path,
         bm25_path=bm25_path,
+        index_profile=index_profile,
+        deployed_sha=deployed_sha,
+        otlp_endpoint=otlp_endpoint,
     )

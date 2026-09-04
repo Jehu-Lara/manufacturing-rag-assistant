@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from src.core.config import Settings
 from src.domain.models import ChunkMetadata, RetrievalResult
 
 
@@ -16,7 +15,7 @@ class EmbedderPort(Protocol):
 
 @runtime_checkable
 class VectorStorePort(Protocol):
-    def build_collection(self, chunks: list[ChunkMetadata]) -> None: ...
+    def build_collection(self, chunks: list[ChunkMetadata], embedding_inputs: list[str]) -> None: ...
     def query(self, text: str, top_n: int) -> list[tuple[str, float, dict[str, Any]]]: ...
     def get_metadata(self, chunk_id: str) -> dict[str, Any]: ...
     def ping(self) -> bool: ...
@@ -24,7 +23,7 @@ class VectorStorePort(Protocol):
 
 @runtime_checkable
 class LexicalIndexPort(Protocol):
-    def build_index(self, chunks: list[ChunkMetadata]) -> None: ...
+    def build_index(self, chunks: list[ChunkMetadata], *, chunks_sha256: str) -> None: ...
     def query(self, text: str, top_n: int) -> list[tuple[str, float]]: ...
 
 
@@ -36,5 +35,5 @@ class RetrieverPort(Protocol):
 @runtime_checkable
 class LLMClientPort(Protocol):
     async def generate_structured(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]: ...

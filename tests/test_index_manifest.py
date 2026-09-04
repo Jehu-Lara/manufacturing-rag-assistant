@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, MODEL_REVISION
+from src.adapters.secondary.lexical.bm25_lexical_index import BM25_SCHEMA_VERSION, LEXICAL_PROFILE
 from src.features.retrieval import index_manifest
 
 
@@ -186,6 +187,8 @@ def _manifest() -> index_manifest.IndexManifest:
         embedding_revision=MODEL_REVISION,
         build_commit="cafe" * 10,
         chunk_count=228,
+        lexical_profile=LEXICAL_PROFILE,
+        bm25_schema_version=BM25_SCHEMA_VERSION,
     )
 
 
@@ -214,6 +217,8 @@ def test_manifest_write_holds_the_required_fields(tmp_path: Path):
         "embedding_revision",
         "build_commit",
         "chunk_count",
+        "lexical_profile",
+        "bm25_schema_version",
     }
 
 
@@ -250,6 +255,8 @@ def test_manifest_verify_passes_when_stored_hashes_match_live_inputs(tmp_path: P
         embedding_revision=MODEL_REVISION,
         build_commit="deadbeef",
         chunk_count=1,
+        lexical_profile=LEXICAL_PROFILE,
+        bm25_schema_version=BM25_SCHEMA_VERSION,
     )
     index_manifest.write(manifest, path)
     index_manifest.verify(path, chunks_path=chunks_file, corpus_dir=tmp_path)
@@ -268,6 +275,8 @@ def test_manifest_verify_raises_on_hash_mismatch(tmp_path: Path):
         embedding_revision=MODEL_REVISION,
         build_commit="deadbeef",
         chunk_count=1,
+        lexical_profile=LEXICAL_PROFILE,
+        bm25_schema_version=BM25_SCHEMA_VERSION,
     )
     index_manifest.write(manifest, path)
     with pytest.raises(ValueError):
@@ -292,6 +301,8 @@ def _coherent_manifest_on_disk(
             embedding_revision=MODEL_REVISION,
             build_commit="deadbeef",
             chunk_count=chunk_count,
+            lexical_profile=LEXICAL_PROFILE,
+            bm25_schema_version=BM25_SCHEMA_VERSION,
         ),
         path,
     )
@@ -345,3 +356,45 @@ def test_manifest_verify_rejects_chunk_count_mismatch(tmp_path: Path):
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ValueError, match="chunk_count"):
         index_manifest.verify(path, chunks_path=chunks_file, corpus_dir=tmp_path)
+
+
+# --- lexical fields (bucket 3) ---
+
+
+def test_manifest_records_the_lexical_profile_and_schema_version(tmp_path):
+    chunks = tmp_path / "chunks.jsonl"
+    chunks.write_text('{"chunk_id": "d::chunk-0000"}\n', encoding="utf-8")
+    corpus = tmp_path / "corpus"
+    (corpus / "public").mkdir(parents=True)
+    (corpus / "synthetic").mkdir(parents=True)
+    (corpus / "public" / "a.md").write_text("# A\n", encoding="utf-8")
+
+    manifest = index_manifest.build_manifest(
+        "contextual-v1", 1, build_commit="c" * 40, chunks_path=chunks, corpus_dir=corpus
+    )
+
+    assert manifest.lexical_profile == LEXICAL_PROFILE
+    assert manifest.bm25_schema_version == BM25_SCHEMA_VERSION
+
+
+def test_read_rejects_a_manifest_missing_the_lexical_fields(tmp_path):
+    """_MANIFEST_FIELDS drives the missing-field check, so a pre-bucket-3
+    manifest is unreadable rather than silently assumed compatible."""
+    path = tmp_path / "index_manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "index_profile": "contextual-v1",
+                "chunks_sha256": "a" * 64,
+                "corpus_sha256": "b" * 64,
+                "embedding_model": "m",
+                "embedding_revision": "r",
+                "build_commit": "c" * 40,
+                "chunk_count": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="lexical_profile"):
+        index_manifest.read(path)

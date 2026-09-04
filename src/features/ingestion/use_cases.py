@@ -7,9 +7,10 @@ from typing import Any, Iterable, Optional
 
 import yaml
 
+from src.core.paths import CORPUS_DIR
 from src.domain.models import SourceType
 
-CORPUS_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "corpus"
+CORPUS_ROOT = CORPUS_DIR
 SOURCES_MANIFEST = CORPUS_ROOT / "SOURCES.md"
 
 _FRONTMATTER_PATTERN = re.compile(r"\A---\n(.*?\n)---\n", re.DOTALL)

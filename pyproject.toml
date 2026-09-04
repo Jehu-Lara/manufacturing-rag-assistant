@@ -66,6 +66,9 @@ strict = true
 
 # rank_bm25 and PyYAML ship no py.typed marker / stub package — scoped, not a
 # blanket ignore_missing_imports, per the "no global ignore_missing_imports" rule.
+# snowballstemmer is the same situation AND is experiment-only: it lives in
+# requirements-experiments.txt, never in the runtime lock, so it is absent on a
+# production install by design (audit bucket 5).
 [[tool.mypy.overrides]]
-module = ["rank_bm25.*", "yaml.*"]
+module = ["rank_bm25.*", "yaml.*", "snowballstemmer.*"]
 ignore_missing_imports = true
