@@ -159,6 +159,42 @@ class QueryUseCase:
             )
             return answer
 
+        # document_id is deliberately not checked here: the prompt envelope
+        # never carries it, and CitationResolver fails the whole set closed
+        # later if a retrieved chunk lacks it.
+        prompt_metadata_incomplete = any(
+            not isinstance(result.metadata.get(field), str) or not result.metadata.get(field, "").strip()
+            for result in prompt_results
+            for field in (
+                "document_title",
+                "section_heading",
+                "revision",
+                "source_type",
+                "chunk_text",
+            )
+        )
+        if prompt_metadata_incomplete:
+            logger.info(
+                "prompt context metadata incomplete; refusing",
+                extra={
+                    "request_id": request_id,
+                    "event": "incomplete_prompt_metadata_downgraded_to_refusal",
+                    "language": language,
+                    "gate_band": gate_band,
+                },
+            )
+            answer = self._refusal_answer(
+                language=language,
+                confidence=score,
+                gate_band=gate_band,
+                decision_reason="incomplete_retrieved_metadata",
+                request_id=request_id,
+            )
+            _log_query_completed(
+                request_id, True, "ok", gate_band, "incomplete_retrieved_metadata", score, start_time
+            )
+            return answer
+
         if gate_band == "grounded_review":
             system_prompt = build_grounded_review_system_prompt(language)
             schema = GROUNDED_REVIEW_SCHEMA

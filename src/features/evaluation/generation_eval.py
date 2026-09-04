@@ -48,11 +48,11 @@ CSV_COLUMNS = [
 def _build_use_case_and_retriever(
     expansion_mode: ExpansionMode = "off",
     index_profile: IndexProfile = "raw-v1",
-) -> tuple[QueryUseCase, HybridRetriever]:
+) -> tuple[QueryUseCase, HybridRetriever, GroqOpenAiLlmClient]:
     settings = load_settings()
     retriever = build_retriever(expansion_mode, expected_profile=index_profile)
     llm_client = GroqOpenAiLlmClient()
-    return QueryUseCase(retriever, llm_client, settings), retriever
+    return QueryUseCase(retriever, llm_client, settings), retriever, llm_client
 
 
 def correct_refusal_rate(rows: list[dict[str, Any]]) -> float:
@@ -113,12 +113,16 @@ def _error_row(question: dict[str, Any], latency_ms: float, error: Exception) ->
     }
 
 
-def _build_row(use_case: QueryUseCase, retriever: HybridRetriever, question: dict[str, Any]) -> dict[str, Any]:
+async def _build_row_async(
+    use_case: QueryUseCase, retriever: HybridRetriever, question: dict[str, Any]
+) -> dict[str, Any]:
+    # Sequential runner: this blocks the one owning loop, which holds no
+    # concurrent work to starve.
     time.sleep(INTER_QUESTION_DELAY_SECONDS)
 
     start_time = time.monotonic()
     try:
-        answer = asyncio.run(use_case.answer_question(question["question"], question["language"]))
+        answer = await use_case.answer_question(question["question"], question["language"])
         latency_ms = (time.monotonic() - start_time) * 1000
 
         retrieval_succeeded = None
@@ -258,10 +262,25 @@ def run(
 
     if use_case is None or retriever is None:
         assert_live_index_profile(index_profile)
-        use_case, retriever = _build_use_case_and_retriever(expansion_mode, index_profile)
-    rows: list[dict[str, Any]] = []
-    for question in questions:
-        rows.append(_build_row(use_case, retriever, question))
+        use_case, retriever, owned_client = _build_use_case_and_retriever(expansion_mode, index_profile)
+    else:
+        owned_client = None
+
+    async def _collect_rows() -> list[dict[str, Any]]:
+        """One owning event loop for the whole run: the owned LLM client is
+        created (constructor binds nothing), used and closed inside this same
+        loop, so cached httpx connections never cross `asyncio.run`
+        boundaries."""
+        rows: list[dict[str, Any]] = []
+        try:
+            for question in questions:
+                rows.append(await _build_row_async(use_case, retriever, question))
+        finally:
+            if owned_client is not None:
+                await owned_client.aclose()
+        return rows
+
+    rows = asyncio.run(_collect_rows())
 
     correct_refusal = correct_refusal_rate(rows)
     false_refusal = false_refusal_rate(rows)

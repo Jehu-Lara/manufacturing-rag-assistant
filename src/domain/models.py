@@ -26,6 +26,7 @@ DecisionReason = Literal[
     "quote_too_long",
     "quote_not_found",
     "unresolved_citation",
+    "incomplete_retrieved_metadata",
     "accepted_grounded",
     "accepted_confident",
     "generation_error",

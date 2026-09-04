@@ -437,3 +437,32 @@ def test_error_row_records_only_exception_type_not_message():
     )
     assert row["error"] == "RuntimeError"
     assert "SENSITIVE" not in json.dumps(row)
+
+
+@patch("src.features.evaluation.generation_eval.artifacts.resolve_provenance")
+@patch("src.features.evaluation.generation_eval.time.sleep")
+def test_run_closes_owned_llm_client(mock_sleep, mock_provenance, tmp_path, monkeypatch):
+    import src.features.evaluation.generation_eval as gen_eval
+
+    mock_provenance.return_value = _FakeHeader()
+    eval_set_path = tmp_path / "fake_eval_set.json"
+    _write_fake_eval_set(eval_set_path)
+    use_case, retriever = _build_fixtures()
+
+    closed: list[bool] = []
+
+    class _RecordingClient:
+        async def aclose(self) -> None:
+            closed.append(True)
+
+    recording = _RecordingClient()
+    monkeypatch.setattr(gen_eval, "assert_live_index_profile", lambda profile: None)
+    monkeypatch.setattr(
+        gen_eval,
+        "_build_use_case_and_retriever",
+        lambda *a, **k: (use_case, retriever, recording),
+    )
+
+    gen_eval.run(eval_set_path=eval_set_path, report_dir=tmp_path / "reports")
+
+    assert closed == [True]

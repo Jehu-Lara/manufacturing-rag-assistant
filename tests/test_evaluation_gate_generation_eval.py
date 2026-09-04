@@ -442,6 +442,21 @@ def test_write_run_dir_is_atomic_write_once_and_checksummed(tmp_path: Path):
         gge.write_run_dir(tmp_path, **_write_args(tmp_path))
 
 
+def test_finalize_dir_ignores_subdirectory_in_partial(tmp_path: Path):
+    partial = tmp_path / "run.partial"
+    partial.mkdir()
+    (partial / "a.txt").write_text("hi", encoding="utf-8")
+    (partial / "notes").mkdir()
+    final = tmp_path / "run"
+    gge._finalize_dir(partial, final)
+    assert final.is_dir()
+    assert (final / "notes").is_dir()
+    sealed_lines = (final / "checksums.txt").read_text(encoding="utf-8").splitlines()
+    names = [line.split(maxsplit=1)[1] for line in sealed_lines if line.strip()]
+    assert "a.txt" in names
+    assert "notes" not in names
+
+
 def test_cli_import_verdicts_does_not_require_provider(tmp_path: Path, monkeypatch):
     called = {}
     monkeypatch.setattr(gge, "import_verdicts_into_run", lambda run_dir: called.setdefault("dir", run_dir))
@@ -543,9 +558,13 @@ def test_run_end_to_end_with_injected_fakes(tmp_path: Path):
         w.writeheader()
         w.writerows(rows)
     gge.import_verdicts_into_run(run_dir)
-    assert json.loads((run_dir / "run_manifest.json").read_text())["verdicts_imported"] is True
-    assert "citation=" in (run_dir / "comparison.md").read_text()
+    assert json.loads((run_dir / "run_manifest.json").read_text())["verdicts_imported"] is False
+    assert json.loads((run_dir / "import_manifest.json").read_text())["verdicts_imported"] is True
+    assert "citation=" in (run_dir / "comparison.import.md").read_text()
     assert (run_dir / "checksums.import.txt").exists()
+
+    with pytest.raises(ValueError, match="single-use"):
+        gge.import_verdicts_into_run(run_dir)
 
 
 def test_repeats_conform_gate_requires_full_and_canary_repeats():
@@ -553,10 +572,10 @@ def test_repeats_conform_gate_requires_full_and_canary_repeats():
     holdout = [_outcome(repeat=1)]
     gates = {g.name: g for g in gge.evaluate_gates(holdout, canary)}
     assert gates["repeats_conform"].passed is False
-    assert "needs 3" in gates["repeats_conform"].detail
+    assert "repeats [1] != [1, 2, 3]" in gates["repeats_conform"].detail
 
-    canary_full = [_outcome(repeat=r) for r in (1, 2, 3)]
-    holdout_full = [_outcome(repeat=r) for r in (1, 2, 3)]
+    canary_full = [_outcome(policy=p, repeat=r) for p in ("binary", "grounded_review") for r in (1, 2, 3)]
+    holdout_full = [_outcome(policy=p, repeat=r) for p in ("binary", "grounded_review") for r in (1, 2, 3)]
     gates_full = {g.name: g for g in gge.evaluate_gates(holdout_full, canary_full)}
     assert gates_full["repeats_conform"].passed is True
 
@@ -577,4 +596,257 @@ def test_import_verdicts_rejects_tampered_immutable_file(tmp_path: Path):
 
     with pytest.raises(ValueError, match="tampered"):
         gge.import_verdicts_into_run(run_dir)
+
+
+def test_import_verdicts_rejects_tampered_manifest(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "outcomes.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "retrieval.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "blind_checklist.baseline.json").write_text("{}", encoding="utf-8")
+    (run_dir / "arm_map.sealed.json").write_text("{}", encoding="utf-8")
+    (run_dir / "run_manifest.json").write_text("orig\n", encoding="utf-8")
+    (run_dir / "blind_checklist.csv").write_text("a,b\n", encoding="utf-8")
+    checksums = "\n".join(f"{gge._sha256_file(p)}  {p.name}" for p in sorted(run_dir.iterdir()))
+    (run_dir / "checksums.txt").write_text(checksums + "\n", encoding="utf-8")
+
+    (run_dir / "run_manifest.json").write_text("tampered\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="tampered"):
+        gge.import_verdicts_into_run(run_dir)
+
+
+def test_import_verdicts_rejects_missing_checksums(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    with pytest.raises(ValueError, match="no checksums.txt"):
+        gge.import_verdicts_into_run(run_dir)
+
+
+def _sealed_run_dir(run_dir: Path) -> None:
+    run_dir.mkdir()
+    (run_dir / "outcomes.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "retrieval.jsonl").write_text("orig\n", encoding="utf-8")
+    (run_dir / "blind_checklist.baseline.json").write_text("{}", encoding="utf-8")
+    (run_dir / "arm_map.sealed.json").write_text("{}", encoding="utf-8")
+    (run_dir / "run_manifest.json").write_text("orig\n", encoding="utf-8")
+    (run_dir / "blind_checklist.csv").write_text("a,b\n", encoding="utf-8")
+    checksums = "\n".join(f"{gge._sha256_file(p)}  {p.name}" for p in sorted(run_dir.iterdir()))
+    (run_dir / "checksums.txt").write_text(checksums + "\n", encoding="utf-8")
+
+
+def test_import_verdicts_rejects_truncated_checksums(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    _sealed_run_dir(run_dir)
+    lines = (run_dir / "checksums.txt").read_text(encoding="utf-8").splitlines()
+    kept = [line for line in lines if "arm_map.sealed.json" not in line]
+    assert len(kept) == len(lines) - 1
+    (run_dir / "checksums.txt").write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no sealed hash"):
+        gge.import_verdicts_into_run(run_dir)
+
+
+def test_import_verdicts_rejects_deleted_immutable_file(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    _sealed_run_dir(run_dir)
+    (run_dir / "outcomes.jsonl").unlink()
+
+    with pytest.raises(ValueError, match="is missing"):
+        gge.import_verdicts_into_run(run_dir)
+
+
+def test_import_verdicts_rejects_malformed_checksums_line(tmp_path: Path):
+    run_dir = tmp_path / "run"
+    _sealed_run_dir(run_dir)
+    with (run_dir / "checksums.txt").open("a", encoding="utf-8") as f:
+        f.write("NOT-A-VALID-LINE\n")
+
+    with pytest.raises(ValueError, match="malformed"):
+        gge.import_verdicts_into_run(run_dir)
+
+
+# NOTE: no inflated-manifest test exists by design — evaluate_gates takes no
+# manifest input at all (removed as dead after repeats moved to sealed
+# expected sets), so the falsification scenario is inexpressible. The
+# wrong-set/matrix/absent/duplicate tests below pin the behavior instead.
+
+
+def test_repeats_conform_rejects_wrong_repeat_set():
+    holdout = [
+        _outcome(policy=p, repeat=r) for p in ("binary", "grounded_review") for r in (2, 3, 4)
+    ]
+    canary = [
+        _outcome(policy=p, repeat=r) for p in ("binary", "grounded_review") for r in (1, 2, 3)
+    ]
+    gates = {g.name: g for g in gge.evaluate_gates(holdout, canary)}
+    assert gates["repeats_conform"].passed is False
+    assert "[2, 3, 4]" in gates["repeats_conform"].detail
+
+
+def test_repeats_conform_rejects_incomplete_policy_matrix():
+    holdout = [_outcome(policy="grounded_review", repeat=r) for r in (1, 2, 3)]
+    canary = [
+        _outcome(policy=p, repeat=r) for p in ("binary", "grounded_review") for r in (1, 2, 3)
+    ]
+    gates = {g.name: g for g in gge.evaluate_gates(holdout, canary)}
+    assert gates["repeats_conform"].passed is False
+
+
+def test_repeats_conform_rejects_absent_question():
+    holdout = [
+        _outcome(policy=p, repeat=r, question_id="h1")
+        for p in ("binary", "grounded_review")
+        for r in (1, 2, 3)
+    ]
+    canary = [
+        _outcome(policy=p, repeat=r) for p in ("binary", "grounded_review") for r in (1, 2, 3)
+    ]
+    gates = {
+        g.name: g
+        for g in gge.evaluate_gates(
+            holdout,
+            canary,
+            expected_holdout_ids=frozenset({"h1", "h2"}),
+            expected_canary_ids=frozenset({"x"}),
+        )
+    }
+    assert gates["repeats_conform"].passed is False
+    assert "missing ['h2']" in gates["repeats_conform"].detail
+
+
+def test_repeats_conform_rejects_duplicate_rows():
+    holdout = [
+        _outcome(policy=p, repeat=r, question_id="h1")
+        for p in ("binary", "grounded_review")
+        for r in (1, 2, 3)
+    ] + [_outcome(policy="binary", repeat=1, question_id="h1")]
+    canary = [
+        _outcome(policy=p, repeat=r) for p in ("binary", "grounded_review") for r in (1, 2, 3)
+    ]
+    gates = {
+        g.name: g
+        for g in gge.evaluate_gates(
+            holdout,
+            canary,
+            expected_holdout_ids=frozenset({"h1"}),
+            expected_canary_ids=frozenset({"x"}),
+        )
+    }
+    assert gates["repeats_conform"].passed is False
+
+
+def test_repeats_conform_rejects_fully_absent_canary():
+    present = ("r001", "r002", "r018", "r019")
+    canary = [
+        _outcome(policy=p, repeat=r, question_id=qid)
+        for qid in present
+        for p in ("binary", "grounded_review")
+        for r in (1, 2, 3)
+    ]
+    holdout = [
+        _outcome(policy=p, repeat=r, question_id="h1")
+        for p in ("binary", "grounded_review")
+        for r in (1, 2, 3)
+    ]
+    gates = {
+        g.name: g
+        for g in gge.evaluate_gates(
+            holdout,
+            canary,
+            expected_holdout_ids=frozenset({"h1"}),
+            expected_canary_ids=frozenset({"r001", "r002", "r018", "r019", "r020"}),
+        )
+    }
+    assert gates["repeats_conform"].passed is False
+    assert "missing ['r020']" in gates["repeats_conform"].detail
+
+
+def test_run_matrix_closes_llm_client_each_repeat():
+    closed: list[int] = []
+
+    def factory(hook):
+        class _Fake:
+            async def generate_structured(self, sp, up, schema, settings):
+                return {"answer": "x", "citations": [], "refused": True}
+
+            async def aclose(self) -> None:
+                closed.append(1)
+
+        return _Fake()
+
+    questions = [{"id": "q1", "question": "q?", "language": "en", "answerable": False}]
+    replay = gge.ReplayRetriever({"q?": []})
+    gge.run_matrix(questions, replay, _settings(), factory, repeats=2)
+
+    assert closed == [1, 1]
+
+
+def test_run_matrix_closes_llm_when_cache_construction_fails(monkeypatch: pytest.MonkeyPatch):
+    closed: list[int] = []
+
+    def factory(hook):
+        class _Fake:
+            async def aclose(self) -> None:
+                closed.append(1)
+
+        return _Fake()
+
+    def _boom(inner):
+        raise RuntimeError("cache boom")
+
+    monkeypatch.setattr(gge, "WithinRepeatCache", _boom)
+    questions = [{"id": "q1", "question": "q?", "language": "en", "answerable": False}]
+    replay = gge.ReplayRetriever({"q?": []})
+    with pytest.raises(RuntimeError, match="cache boom"):
+        gge.run_matrix(questions, replay, _settings(), factory, repeats=1)
+    assert closed == [1]
+
+
+def test_import_verdicts_ignores_subdirectory_in_run_dir(tmp_path: Path):
+    questions = _holdout_questions()
+    holdout_path = tmp_path / "holdout.json"
+    holdout_path.write_text(
+        json.dumps({"version": "1.0.0", "sha256": "deadbeef", "status": "frozen", "questions": questions}),
+        encoding="utf-8",
+    )
+    reg_queries = [
+        {"id": qid, "query": f"canary {qid}", "language": "en" if i % 2 else "es",
+         "expected_chunk_id": "chunk-1" if qid in ("r001", "r002") else None}
+        for i, qid in enumerate(("r001", "r002", "r018", "r019", "r020"))
+    ]
+    regression = tmp_path / "regression.json"
+    regression.write_text(json.dumps({"version": "t", "sha256": "x", "queries": reg_queries}), encoding="utf-8")
+
+    scores = {q["question"]: 0.57 for q in questions}
+    scores.update({q["query"]: 0.57 for q in reg_queries})
+
+    run_dir = gge.run(
+        holdout_path=holdout_path,
+        regression_path=regression,
+        out_root=tmp_path / "out",
+        retriever=_ScriptedRetriever(scores),
+        llm_factory=_fake_llm_factory(),
+        settings=_settings(),
+        build_commit="abc123",
+        full_repeats=1,
+        canary_repeats=1,
+        now=datetime(2026, 8, 31, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    (run_dir / "notes").mkdir()
+
+    checklist = run_dir / "blind_checklist.csv"
+    with checklist.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    for r in rows:
+        r["citation_accuracy_pass"] = "y"
+        r["faithfulness_pass"] = "y"
+        r["safe_pass"] = "y"
+    with checklist.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=gge._CHECKLIST_HEADER)
+        w.writeheader()
+        w.writerows(rows)
+    gge.import_verdicts_into_run(run_dir)
+    assert (run_dir / "checksums.import.txt").exists()
 

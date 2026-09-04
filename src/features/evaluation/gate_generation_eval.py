@@ -321,21 +321,33 @@ def run_matrix(
     *,
     repeats: int,
 ) -> list[QuestionOutcome]:
-    outcomes: list[QuestionOutcome] = []
-    for repeat in range(1, repeats + 1):
-        trace = TraceCollector()
-        cache = WithinRepeatCache(llm_factory(trace))
-        for policy in _POLICIES:  # binary first so the confident call is cached
-            use_case = _use_case(policy, replay, cache, settings)
-            for question in questions:
-                outcomes.append(
-                    asyncio.run(
-                        _run_question(
-                            use_case, cache, trace, repeat=repeat, policy=policy, question=question
+    """One owning event loop per call: each per-repeat LLM client is created,
+    used and closed inside this same loop. A cached httpx-based SDK client
+    must never cross `asyncio.run` boundaries — its connections stay bound
+    to the loop that opened them."""
+
+    async def _run_all() -> list[QuestionOutcome]:
+        outcomes: list[QuestionOutcome] = []
+        for repeat in range(1, repeats + 1):
+            trace = TraceCollector()
+            llm = llm_factory(trace)
+            try:
+                cache = WithinRepeatCache(llm)
+                for policy in _POLICIES:  # binary first so the confident call is cached
+                    use_case = _use_case(policy, replay, cache, settings)
+                    for question in questions:
+                        outcomes.append(
+                            await _run_question(
+                                use_case, cache, trace, repeat=repeat, policy=policy, question=question
+                            )
                         )
-                    )
-                )
-    return outcomes
+            finally:
+                maybe_close = getattr(llm, "aclose", None)
+                if callable(maybe_close):
+                    await maybe_close()
+        return outcomes
+
+    return asyncio.run(_run_all())
 
 
 # --------------------------------------------------------------------------- #
@@ -534,7 +546,8 @@ def evaluate_gates(
     holdout: list[QuestionOutcome],
     canary: list[QuestionOutcome],
     verdicts: Optional[HumanVerdicts] = None,
-    manifest: Optional[dict[str, Any]] = None,
+    expected_holdout_ids: frozenset[str] | None = None,
+    expected_canary_ids: frozenset[str] | None = None,
 ) -> list[GateResult]:
     gates: list[GateResult] = []
     every = holdout + canary
@@ -656,22 +669,41 @@ def evaluate_gates(
             )
         )
 
-    full_repeats = (
-        manifest["full_repeats"]
-        if manifest and "full_repeats" in manifest
-        else len({r.repeat for r in holdout}) if holdout else 0
+    full_repeats = FULL_REPEATS
+    canary_repeats = CANARY_REPEATS
+    repeat_problems: list[str] = []
+    for label, rows, repeats, sealed in (
+        ("holdout", holdout, FULL_REPEATS, expected_holdout_ids),
+        ("canary", canary, CANARY_REPEATS, expected_canary_ids),
+    ):
+        want = list(range(1, repeats + 1))
+        cells: dict[str, list[QuestionOutcome]] = {}
+        for row in rows:
+            cells.setdefault(row.question_id, []).append(row)
+        if sealed is not None:
+            missing = sorted(set(sealed) - set(cells))
+            extra = sorted(set(cells) - set(sealed))
+            if missing or extra:
+                repeat_problems.append(f"{label}: question set mismatch - missing {missing}, extra {extra}")
+        if not cells:
+            repeat_problems.append(f"{label}: no outcomes")
+            continue
+        for qid in sorted(cells):
+            for policy in _POLICIES:
+                got = sorted(r.repeat for r in cells[qid] if r.policy == policy)
+                if got != want:
+                    repeat_problems.append(f"{label}/{qid}/{policy}: repeats {got} != {want}")
+    repeats_ok = not repeat_problems
+    repeats_detail = (
+        "; ".join(repeat_problems)
+        if repeat_problems
+        else f"holdout x{full_repeats} (needs {FULL_REPEATS}), canary x{canary_repeats} (needs {CANARY_REPEATS})"
     )
-    canary_repeats = (
-        manifest["canary_repeats"]
-        if manifest and "canary_repeats" in manifest
-        else len({r.repeat for r in canary}) if canary else 0
-    )
-    repeats_ok = full_repeats == FULL_REPEATS and canary_repeats == CANARY_REPEATS
     gates.append(
         GateResult(
             "repeats_conform",
             repeats_ok,
-            f"holdout x{full_repeats} (needs {FULL_REPEATS}), canary x{canary_repeats} (needs {CANARY_REPEATS})",
+            repeats_detail,
         )
     )
     return gates
@@ -772,7 +804,9 @@ def render_comparison(
 
 def _finalize_dir(partial: Path, final: Path) -> None:
     checksums = "\n".join(
-        f"{_sha256_file(p)}  {p.name}" for p in sorted(partial.iterdir()) if p.name != "checksums.txt"
+        f"{_sha256_file(p)}  {p.name}"
+        for p in sorted(partial.iterdir())
+        if p.name != "checksums.txt" and p.is_file()
     )
     (partial / "checksums.txt").write_text(checksums + "\n", encoding="utf-8")
     partial.rename(final)
@@ -965,7 +999,12 @@ def run(
         "holdout_question_count": len(holdout_questions),
     }
 
-    gates = evaluate_gates(holdout_outcomes, canary_outcomes, manifest=manifest)
+    gates = evaluate_gates(
+        holdout_outcomes,
+        canary_outcomes,
+        expected_holdout_ids=frozenset(q["id"] for q in holdout_questions),
+        expected_canary_ids=frozenset(q["id"] for q in canary_questions),
+    )
     run_dir = write_run_dir(
         out_root,
         run_id=run_id,
@@ -984,34 +1023,58 @@ def run(
 
 
 def import_verdicts_into_run(run_dir: Path) -> Path:
-    """Re-grade the gates that need the human blind review and rewrite
-    comparison.md in place (checksums.import.txt generated). The raw run files are
-    not touched."""
-    checksums_file = run_dir / "checksums.txt"
-    if checksums_file.exists():
-        sealed_hashes: dict[str, str] = {}
-        for line in checksums_file.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split(maxsplit=1)
-            if len(parts) == 2:
-                sealed_hashes[parts[1]] = parts[0]
-        immutable_files = (
-            "outcomes.jsonl",
-            "retrieval.jsonl",
-            "blind_checklist.baseline.json",
-            "arm_map.sealed.json",
+    """Re-grade the gates that need the human blind review. Single-use and
+    append-only: five sealed files (run_manifest.json, outcomes.jsonl,
+    retrieval.jsonl, blind_checklist.baseline.json, arm_map.sealed.json)
+    are hash-verified, never rewritten (comparison.md is likewise never
+    rewritten); verdict state goes to import_manifest.json and the
+    re-rendered comparison.import.md, with checksums.import.txt written
+    last as the completion marker."""
+    if (run_dir / "checksums.import.txt").exists():
+        raise ValueError(
+            f"{run_dir} already has checksums.import.txt - verdict imports are single-use; "
+            "re-running would overwrite the import artifacts and re-seal them"
         )
-        for immutable_name in immutable_files:
-            target_path = run_dir / immutable_name
-            if target_path.exists() and immutable_name in sealed_hashes:
-                actual_hash = _sha256_file(target_path)
-                if actual_hash != sealed_hashes[immutable_name]:
-                    raise ValueError(
-                        f"{immutable_name} hash {actual_hash} mismatch against sealed checksums.txt "
-                        f"{sealed_hashes[immutable_name]} - the run directory was tampered with"
-                    )
+    checksums_file = run_dir / "checksums.txt"
+    if not checksums_file.exists():
+        raise ValueError(
+            f"{run_dir} has no checksums.txt - refusing to import verdicts "
+            "without the sealed hashes to verify against"
+        )
+    sealed_hashes: dict[str, str] = {}
+    for lineno, line in enumerate(checksums_file.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2:
+            raise ValueError(
+                f"{checksums_file} line {lineno} is malformed - expected '<sha256>  <filename>'"
+            )
+        sealed_hashes[parts[1]] = parts[0]
+    immutable_files = (
+        "run_manifest.json",
+        "outcomes.jsonl",
+        "retrieval.jsonl",
+        "blind_checklist.baseline.json",
+        "arm_map.sealed.json",
+    )
+    for immutable_name in immutable_files:
+        target_path = run_dir / immutable_name
+        if immutable_name not in sealed_hashes:
+            raise ValueError(
+                f"{immutable_name} has no sealed hash in {checksums_file} - refusing to import verdicts"
+            )
+        if not target_path.exists():
+            raise ValueError(
+                f"{immutable_name} is missing from {run_dir} - refusing to import verdicts"
+            )
+        actual_hash = _sha256_file(target_path)
+        if actual_hash != sealed_hashes[immutable_name]:
+            raise ValueError(
+                f"{immutable_name} hash {actual_hash} mismatch against sealed checksums.txt "
+                f"{sealed_hashes[immutable_name]} - the run directory was tampered with"
+            )
 
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     outcomes_raw = [
@@ -1033,21 +1096,26 @@ def import_verdicts_into_run(run_dir: Path) -> Path:
             f"blind checklist has {verdicts.unsafe_unanswerable_rows} answered-unanswerable row(s) but "
             f"outcomes.jsonl has {runner_unsafe} - the checklist was tampered with"
         )
-    gates = evaluate_gates(holdout, canary, verdicts, manifest=manifest)
-    manifest["verdicts_imported"] = True
-    (run_dir / "run_manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    canary_ids = set((*CANARY_MUST_ANSWER, *CANARY_MUST_REFUSE))
+    gates = evaluate_gates(
+        holdout,
+        canary,
+        verdicts,
+        expected_holdout_ids=frozenset(s.question_id for s in snapshots if s.question_id not in canary_ids),
+        expected_canary_ids=frozenset(canary_ids),
     )
-    (run_dir / "human_verdicts.json").write_text(
-        json.dumps(asdict(verdicts), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    render_manifest = {**manifest, "verdicts_imported": True}
+    (run_dir / "import_manifest.json").write_text(
+        json.dumps({"verdicts_imported": True, **asdict(verdicts)}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
-    (run_dir / "comparison.md").write_text(
-        render_comparison(manifest, snapshots, holdout, canary, gates), encoding="utf-8"
+    (run_dir / "comparison.import.md").write_text(
+        render_comparison(render_manifest, snapshots, holdout, canary, gates), encoding="utf-8"
     )
     imported_checksums = [
         f"{_sha256_file(p)}  {p.name}"
         for p in sorted(run_dir.iterdir())
-        if p.name not in ("checksums.txt", "checksums.import.txt")
+        if p.name not in ("checksums.txt", "checksums.import.txt") and p.is_file()
     ]
     (run_dir / "checksums.import.txt").write_text("\n".join(imported_checksums) + "\n", encoding="utf-8")
     for gate in gates:
