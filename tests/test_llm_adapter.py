@@ -540,3 +540,131 @@ def test_unexpected_exception_text_reaches_neither_the_trace_event_nor_its_log_l
     assert trace_records
     for record in trace_records:
         assert EXCEPTION_CANARY not in f"{record.getMessage()} {record.__dict__!r}"
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.asyncio.sleep", new_callable=AsyncMock)
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_fail_fast_backoff_raises_without_sleeping_when_fallback_disabled(
+    mock_groq_cls, mock_openai_cls, mock_sleep
+):
+    mock_groq_cls.return_value = _async_client_with_create(_groq_rate_limit_error())
+
+    with pytest.raises(GenerationError):
+        _run(
+            GroqOpenAiLlmClient(
+                allow_provider_fallback=False, rate_limit_backoff_seconds=()
+            ).generate_structured("system", "user", JSON_SCHEMA, _settings("groq"))
+        )
+
+    assert mock_groq_cls.return_value.chat.completions.create.await_count == 1
+    mock_sleep.assert_not_called()
+    mock_openai_cls.assert_not_called()
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.asyncio.sleep", new_callable=AsyncMock)
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_fail_fast_backoff_tries_fallback_immediately_without_sleeping(
+    mock_groq_cls, mock_openai_cls, mock_sleep
+):
+    mock_groq_cls.return_value = _async_client_with_create(_groq_rate_limit_error())
+    mock_openai_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
+
+    result = _run(
+        GroqOpenAiLlmClient(rate_limit_backoff_seconds=()).generate_structured(
+            "system", "user", JSON_SCHEMA, _settings("groq")
+        )
+    )
+
+    assert result == VALID_PAYLOAD
+    assert mock_groq_cls.return_value.chat.completions.create.await_count == 1
+    assert mock_openai_cls.return_value.chat.completions.create.await_count == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_sdk_client_reused_across_calls_and_closed_by_aclose(mock_groq_cls, mock_openai_cls):
+    groq_client = _async_client_with_create(_response(VALID_JSON_TEXT))
+    groq_client.close = AsyncMock()
+    mock_groq_cls.return_value = groq_client
+
+    client = GroqOpenAiLlmClient()
+    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+
+    assert mock_groq_cls.call_count == 1
+    assert groq_client.chat.completions.create.await_count == 2
+    _run(client.aclose())
+    groq_client.close.assert_awaited_once()
+    mock_openai_cls.assert_not_called()
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_aclose_is_idempotent_and_safe_without_calls(mock_groq_cls, mock_openai_cls):
+    groq_client = _async_client_with_create(_response(VALID_JSON_TEXT))
+    groq_client.close = AsyncMock()
+    mock_groq_cls.return_value = groq_client
+
+    fresh = GroqOpenAiLlmClient()
+    _run(fresh.aclose())
+    _run(fresh.aclose())
+    mock_groq_cls.assert_not_called()
+
+    used = GroqOpenAiLlmClient()
+    _run(used.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    _run(used.aclose())
+    _run(used.aclose())
+    groq_client.close.assert_awaited_once()
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_credential_change_rebuilds_provider_client_without_storing_secret(mock_groq_cls, mock_openai_cls):
+    first_client = _async_client_with_create(_response(VALID_JSON_TEXT))
+    first_client.close = AsyncMock()
+    second_client = _async_client_with_create(_response(VALID_JSON_TEXT))
+    second_client.close = AsyncMock()
+    mock_groq_cls.side_effect = [first_client, second_client]
+    rotated = Settings(
+        groq_api_key="rotated-key",
+        openai_api_key="openai-test-key",
+        llm_provider="groq",
+        refusal_cosine_threshold=0.5599,
+        log_level="INFO",
+    )
+
+    client = GroqOpenAiLlmClient()
+    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    _run(client.generate_structured("system", "user", JSON_SCHEMA, rotated))
+
+    assert mock_groq_cls.call_count == 2
+    first_client.close.assert_awaited_once()
+    second_client.close.assert_not_called()
+    assert "rotated-key" not in repr(client._clients)
+    assert "groq-test-key" not in repr(client._clients)
+    _run(client.aclose())
+    second_client.close.assert_awaited_once()
+
+
+@patch("src.adapters.secondary.llm.groq_openai_client.openai.AsyncOpenAI")
+@patch("src.adapters.secondary.llm.groq_openai_client.groq.AsyncGroq")
+def test_aclose_attempts_every_client_and_raises_group_on_failure(mock_groq_cls, mock_openai_cls):
+    groq_client = _async_client_with_create(_response(VALID_JSON_TEXT))
+    groq_client.close = AsyncMock(side_effect=RuntimeError("close boom"))
+    openai_client = _async_client_with_create(_response(VALID_JSON_TEXT))
+    openai_client.close = AsyncMock()
+    mock_groq_cls.return_value = groq_client
+    mock_openai_cls.return_value = openai_client
+
+    client = GroqOpenAiLlmClient()
+    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("openai")))
+
+    with pytest.raises(ExceptionGroup) as exc_info:
+        _run(client.aclose())
+    groq_client.close.assert_awaited_once()
+    openai_client.close.assert_awaited_once()
+    assert any(isinstance(e, RuntimeError) for e in exc_info.value.exceptions)

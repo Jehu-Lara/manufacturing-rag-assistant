@@ -51,14 +51,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     lexical_index.validate([chunk.chunk_id for chunk in chunks])
 
     retriever = HybridRetriever(vector_store, lexical_index)
-    llm_client = GroqOpenAiLlmClient(trace_hook=log_llm_trace)
+    llm_client = GroqOpenAiLlmClient(trace_hook=log_llm_trace, rate_limit_backoff_seconds=())
 
-    app.state.settings = settings
-    app.state.vector_store = vector_store
-    app.state.query_use_case = QueryUseCase(retriever, llm_client, settings)
-    app.state.rate_limiter = RateLimiter(max_requests=settings.rate_limit_per_minute)
+    try:
+        app.state.settings = settings
+        app.state.vector_store = vector_store
+        app.state.query_use_case = QueryUseCase(retriever, llm_client, settings)
+        app.state.rate_limiter = RateLimiter(max_requests=settings.rate_limit_per_minute)
 
-    yield
+        yield
+    finally:
+        await llm_client.aclose()
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -93,7 +96,7 @@ def create_app() -> FastAPI:
             CORSMiddleware,
             allow_origins=settings.cors_allow_origins,
             allow_methods=["GET", "POST"],
-            allow_headers=["Content-Type", "X-API-Key"],
+            allow_headers=["Content-Type", "X-API-Key", "X-Client-Session"],
         )
     app.add_exception_handler(Exception, unhandled_exception_handler)
     app.include_router(router)

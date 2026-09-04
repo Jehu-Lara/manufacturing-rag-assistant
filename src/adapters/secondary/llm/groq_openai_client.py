@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -250,18 +251,75 @@ class GroqOpenAiLlmClient:
     other in-flight request under a single-process/single-worker deploy."""
 
     def __init__(
-        self, *, allow_provider_fallback: bool = True, trace_hook: Optional[TraceHook] = None
+        self, *, allow_provider_fallback: bool = True, trace_hook: Optional[TraceHook] = None,
+        rate_limit_backoff_seconds: tuple[float, ...] = RATE_LIMIT_BACKOFF_SECONDS,
     ) -> None:
         """Defaults reproduce production exactly: fallback ON, no trace hook.
         The Phase 3C generation runner sets `allow_provider_fallback=False`
         (so a rate-limit fallback can't confound a causal comparison) and a
-        `trace_hook` for physical-call accounting."""
+        `trace_hook` for physical-call accounting. `rate_limit_backoff_seconds=()`
+        means fail-fast: one physical attempt per provider, no sleep. Serving
+        wires fail-fast (a user-facing query must not sleep 105s behind
+        nginx/httpx 60s timeouts) while keeping provider fallback; offline
+        evaluation keeps the default long schedule."""
         self._allow_provider_fallback = allow_provider_fallback
         self._trace_hook = trace_hook
+        self._rate_limit_backoff_seconds = tuple(rate_limit_backoff_seconds)
+        self._clients: dict[str, tuple[Optional[str], Any]] = {}
+        self._lock = asyncio.Lock()
 
     def _emit(self, event: LlmTraceEvent) -> None:
         if self._trace_hook is not None:
             self._trace_hook(event)
+
+    @staticmethod
+    def _key_fingerprint(api_key: Optional[str]) -> Optional[str]:
+        """sha256 of the key, never the key itself: the cache lives as long
+        as the process and must not become a long-lived copy of secrets."""
+        if api_key is None:
+            return None
+        return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+    async def _sdk_client(self, provider: str, api_key: Optional[str]) -> Any:
+        """One SDK client per provider, reused across calls. No `await`
+        sits between the hit-path lookup and return, and rotation is
+        serialized by the lock; a changed key rebuilds that provider's
+        client, closing the stale one first, so rotation inside one
+        instance cannot serve with stale credentials. Concurrent rotation
+        is not supported (see the plan's documented limitation): serving
+        passes one stable Settings and runners are sequential."""
+        want = self._key_fingerprint(api_key)
+        async with self._lock:
+            entry = self._clients.get(provider)
+            if entry is not None:
+                cached_fp, cached_client = entry
+                if cached_fp == want:
+                    return cached_client
+                await cached_client.close()
+            if provider == "groq":
+                created: Any = groq.AsyncGroq(api_key=api_key, max_retries=0)
+            else:
+                created = openai.AsyncOpenAI(api_key=api_key, max_retries=0)
+            self._clients[provider] = (want, created)
+            return created
+
+    async def aclose(self) -> None:
+        """Lifespan/runner teardown. Idempotent: closing twice, or closing a
+        client that never made a call, closes nothing and raises nothing.
+        Every cached client is attempted even if an earlier close fails;
+        failures are aggregated into an ExceptionGroup raised afterwards, so
+        one broken client cannot silently leak the rest."""
+        async with self._lock:
+            cached = list(self._clients.values())
+            self._clients.clear()
+        errors: list[Exception] = []
+        for _, cached_client in cached:
+            try:
+                await cached_client.close()
+            except Exception as exc:
+                errors.append(exc)
+        if errors:
+            raise ExceptionGroup("failed to close one or more LLM clients", errors)
 
     async def _invoke(
         self,
@@ -445,14 +503,14 @@ class GroqOpenAiLlmClient:
         Retry-After when the exception carries one. Re-raises once that
         allowance is exhausted."""
         last_exc: Optional[Exception] = None
-        for attempt_index in range(len(RATE_LIMIT_BACKOFF_SECONDS) + 1):
+        for attempt_index in range(len(self._rate_limit_backoff_seconds) + 1):
             try:
                 return await self._call_provider(
                     provider, system_prompt, user_prompt, schema, api_key, phase=phase
                 )
             except _RATE_LIMIT_ERROR_TYPES as exc:
                 last_exc = exc
-                if attempt_index >= len(RATE_LIMIT_BACKOFF_SECONDS):
+                if attempt_index >= len(self._rate_limit_backoff_seconds):
                     logger.warning(
                         "rate limit backoff exhausted", extra={"provider": provider, "attempts": attempt_index}
                     )
@@ -468,7 +526,7 @@ class GroqOpenAiLlmClient:
                     raise
                 wait_seconds = _extract_retry_after_seconds(exc)
                 if wait_seconds is None:
-                    wait_seconds = RATE_LIMIT_BACKOFF_SECONDS[attempt_index]
+                    wait_seconds = self._rate_limit_backoff_seconds[attempt_index]
                 logger.warning(
                     "rate limited, backing off before retrying same provider",
                     extra={"provider": provider, "wait_seconds": wait_seconds, "attempt": attempt_index + 1},
@@ -504,7 +562,7 @@ class GroqOpenAiLlmClient:
     async def _call_groq(
         self, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str], *, phase: str
     ) -> str:
-        client = groq.AsyncGroq(api_key=api_key, max_retries=0)
+        client = await self._sdk_client("groq", api_key)
         messages = _messages(system_prompt, user_prompt)
         try:
             # messages/response_format are built dynamically from `schema` (a
@@ -524,7 +582,7 @@ class GroqOpenAiLlmClient:
                         "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
                     },
                     max_completion_tokens=MAX_COMPLETION_TOKENS,
-                ),  # type: ignore[call-overload]
+                ),
             )
         except _JSON_SCHEMA_RETRY_ERROR_TYPES as exc:
             if not _is_unsupported_response_format_error(exc):
@@ -549,14 +607,14 @@ class GroqOpenAiLlmClient:
                     messages=messages,
                     response_format={"type": "json_object"},
                     max_completion_tokens=MAX_COMPLETION_TOKENS,
-                ),  # type: ignore[call-overload]
+                ),
             )
         return cast(str, response.choices[0].message.content)
 
     async def _call_openai(
         self, system_prompt: str, user_prompt: str, schema: dict[str, Any], api_key: Optional[str], *, phase: str
     ) -> str:
-        client = openai.AsyncOpenAI(api_key=api_key, max_retries=0)
+        client = await self._sdk_client("openai", api_key)
         # Same dynamic-schema reasoning as _call_groq above.
         response = await self._invoke(
             "openai",
@@ -571,6 +629,6 @@ class GroqOpenAiLlmClient:
                     "json_schema": {"name": "rag_response", "schema": schema, "strict": True},
                 },
                 max_completion_tokens=MAX_COMPLETION_TOKENS,
-            ),  # type: ignore[call-overload]
+            ),
         )
         return cast(str, response.choices[0].message.content)

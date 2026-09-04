@@ -482,3 +482,34 @@ def test_grounded_confident_band_uses_normal_schema():
     assert answer.gate_band == "confident"
     assert answer.decision_reason == "accepted_confident"
     assert "citations" in llm.schemas_seen[0]["properties"]
+
+
+def test_incomplete_prompt_metadata_degrades_to_canonical_refusal():
+    good = _result("chunk-1", 1, THRESHOLD + 0.2)
+    metadata = dict(good.metadata)
+    del metadata["chunk_text"]
+    bad = RetrievalResult(
+        chunk_id=good.chunk_id,
+        fused_score=good.fused_score,
+        semantic_rank=good.semantic_rank,
+        semantic_score=good.semantic_score,
+        bm25_rank=good.bm25_rank,
+        bm25_score=good.bm25_score,
+        metadata=metadata,
+    )
+    llm = InMemoryLLMClient(
+        response={
+            "answer": "The QC unit is responsible for X.",
+            "citations": [{"chunk_id": "chunk-1"}],
+            "refused": False,
+        }
+    )
+    use_case = QueryUseCase(InMemoryRetriever([bad]), llm, _settings())
+
+    answer = _run(use_case.answer_question("What is the QC unit responsible for?", "en"))
+
+    assert answer.refused is True
+    assert answer.status == "ok"
+    assert answer.answer == REFUSAL_MESSAGE["en"]
+    assert answer.citations == []
+    assert answer.decision_reason == "incomplete_retrieved_metadata"

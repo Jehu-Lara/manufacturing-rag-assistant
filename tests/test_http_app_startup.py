@@ -47,3 +47,55 @@ def test_lifespan_aborts_when_bm25_validation_fails(monkeypatch: pytest.MonkeyPa
 def test_lifespan_succeeds_against_the_built_index():
     with TestClient(app_module.create_app()) as client:
         assert client.get("/health").status_code == 200
+
+
+def test_lifespan_wires_fail_fast_llm_backoff(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+    real_client_cls = app_module.GroqOpenAiLlmClient
+
+    def _recording(*args: object, **kwargs: object):
+        captured.update(kwargs)
+        return real_client_cls(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "GroqOpenAiLlmClient", _recording)
+
+    with TestClient(app_module.create_app()):
+        pass
+
+    assert captured.get("rate_limit_backoff_seconds") == ()
+
+
+def test_cors_preflight_allows_client_session_header(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://example.com")
+
+    with TestClient(app_module.create_app()) as client:
+        response = client.options(
+            "/query",
+            headers={
+                "Origin": "https://example.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "X-Client-Session",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "x-client-session" in response.headers["access-control-allow-headers"].lower()
+
+
+def test_lifespan_closes_llm_client_on_partial_startup(monkeypatch: pytest.MonkeyPatch):
+    closed: list[bool] = []
+    real_cls = app_module.GroqOpenAiLlmClient
+
+    class _Recording(real_cls):  # type: ignore[misc]
+        async def aclose(self) -> None:
+            closed.append(True)
+            await super().aclose()
+
+    monkeypatch.setattr(app_module, "GroqOpenAiLlmClient", _Recording)
+    monkeypatch.setattr(app_module, "RateLimiter", _raise("boom"))
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with TestClient(app_module.create_app()):
+            pass
+
+    assert closed == [True]
