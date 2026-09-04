@@ -6,10 +6,12 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from src.core.paths import EVAL_DIR
+
 # regression_queries.json stays at eval/ alongside eval_set.json — a frozen
 # regression dataset is data, not application code, and isn't packaged into the
 # installable wheel under src/ (mirrors eval_set_integrity).
-REGRESSION_SET_FILE = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "regression_queries.json"
+REGRESSION_SET_FILE = EVAL_DIR / "regression_queries.json"
 
 
 def canonical_queries_bytes(queries: list[dict[str, Any]]) -> bytes:

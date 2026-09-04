@@ -213,7 +213,7 @@ def test_auth_uses_constant_time_comparison_not_plain_inequality():
     router source rather than timing, which would be flaky."""
     import inspect
 
-    from src.features.query import router as router_module
+    from src.adapters.primary.http import routes as router_module
 
     source = inspect.getsource(router_module)
     assert "secrets.compare_digest" in source
@@ -337,10 +337,25 @@ def test_rate_limit_log_line_never_carries_the_session_id(client, caplog):
     payload = {"question": "What is the QC unit responsible for?", "language": "en"}
     client.post("/query", json=payload, headers={"X-Client-Session": _SESSION_A})
 
-    with caplog.at_level("WARNING", logger="src.features.query.router"):
+    with caplog.at_level("WARNING", logger="src.adapters.primary.http.routes"):
         rejected = client.post("/query", json=payload, headers={"X-Client-Session": _SESSION_A})
 
     assert rejected.status_code == 429
     record = next(r for r in caplog.records if r.__dict__.get("event") == "rate_limit_exceeded")
     assert record.__dict__["client_kind"] == "session"
     assert _SESSION_A not in caplog.text
+
+
+@pytest.mark.parametrize("blank", ["   ", "\t", "\n", " \t\n "])
+def test_query_whitespace_only_question_returns_422(client, blank):
+    """min_length=1 accepts "   ": the retriever would then embed whitespace and
+    the refusal gate would score noise. A blank question is a malformed
+    request, not a question that happens to be unanswerable."""
+    response = client.post("/query", json={"question": blank, "language": "en"})
+    assert response.status_code == 422
+
+
+def test_query_request_stores_the_question_stripped():
+    from src.adapters.primary.http.schemas import QueryRequest
+
+    assert QueryRequest(question="  what is a PQ?  ", language="en").question == "what is a PQ?"

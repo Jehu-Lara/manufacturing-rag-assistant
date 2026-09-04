@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
+from src.core.paths import INGESTION_OUTPUT_DIR
 from src.domain.models import ChunkMetadata
 from src.features.ingestion.chunker import TiktokenCounter, chunk_document
 from src.features.ingestion.use_cases import Document, load_corpus
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "ingestion" / "output"
+OUTPUT_DIR = INGESTION_OUTPUT_DIR
 OUTPUT_FILE = OUTPUT_DIR / "chunks.jsonl"
 
 

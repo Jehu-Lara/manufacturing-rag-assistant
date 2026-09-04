@@ -4,12 +4,13 @@ import statistics
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import EVAL_REPORTS_DIR
 from src.domain.models import ExpansionMode, IndexProfile
 from src.features.evaluation import artifacts, eval_set_integrity, metrics
 from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
-REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
+REPORT_DIR = EVAL_REPORTS_DIR
 
 SWEEP_STEP = 0.02
 

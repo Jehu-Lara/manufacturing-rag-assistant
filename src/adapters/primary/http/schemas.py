@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 MAX_QUESTION_LENGTH = 2000
 
@@ -10,6 +10,16 @@ MAX_QUESTION_LENGTH = 2000
 class QueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_LENGTH)
     language: Literal["en", "es"]
+
+    @field_validator("question")
+    @classmethod
+    def _reject_blank(cls, value: str) -> str:
+        """min_length=1 passes "   ". Retrieval would then embed whitespace and
+        the refusal gate would score noise as if it were a question."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("question must contain non-whitespace characters")
+        return stripped
 
 
 class Citation(BaseModel):

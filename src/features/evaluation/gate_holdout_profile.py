@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional, cast
 
+from src.core.paths import EVAL_REPORTS_DIR
 from src.domain.models import ExpansionMode, IndexProfile
 from src.domain.policies import top1_semantic_score_from_results
 from src.domain.ports import RetrieverPort
@@ -15,7 +16,7 @@ from src.features.evaluation._eval_retriever import assert_live_index_profile, b
 from src.features.evaluation.gate_score_guard import GATE_CONFIDENT_THRESHOLD, GATE_REVIEW_FLOOR
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K
 
-REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
+REPORT_DIR = EVAL_REPORTS_DIR
 
 # Before the holdout is frozen it must actually exercise the grounded-review
 # band: each EN/ES x answerable/unanswerable cell needs at least this many

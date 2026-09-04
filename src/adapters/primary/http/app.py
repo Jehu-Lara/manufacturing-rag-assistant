@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.adapters.primary.http.rate_limit import RateLimiter
+from src.adapters.primary.http.routes import router
 from src.adapters.secondary.embedder.sentence_transformers_embedder import SentenceTransformersEmbedder
 from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
 from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient, log_llm_trace
@@ -16,10 +17,9 @@ from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
 from src.core.config import load_settings
 from src.core.logging import configure as configure_logging
 from src.core.telemetry import configure_tracing
-from src.features.query.router import router
 from src.features.query.use_cases import QueryUseCase
 from src.features.retrieval import index_manifest
-from src.features.retrieval.cli import load_chunks
+from src.features.retrieval.chunk_store import load_chunks
 from src.features.retrieval.use_cases import HybridRetriever
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = load_settings()
     configure_logging(level=settings.log_level)
 
-    profile = index_manifest.resolve_index_profile()
+    profile = index_manifest.resolve_index_profile(settings)
     manifest = index_manifest.verify(expected_profile=profile)
     chunks = load_chunks()
 
@@ -100,5 +100,5 @@ def create_app() -> FastAPI:
         )
     app.add_exception_handler(Exception, unhandled_exception_handler)
     app.include_router(router)
-    configure_tracing(app)
+    configure_tracing(app, otlp_endpoint=settings.otlp_endpoint)
     return app

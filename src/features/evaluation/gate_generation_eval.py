@@ -20,6 +20,7 @@ from src.core.config import (
     Settings,
     load_settings,
 )
+from src.core.paths import EVAL_REPORTS_DIR
 from src.domain.models import ExpansionMode, IndexProfile, Language, RetrievalResult
 from src.domain.policies import top1_semantic_score_from_results
 from src.domain.ports import LLMClientPort, RetrieverPort
@@ -34,7 +35,7 @@ from src.features.query.use_cases import QueryUseCase
 from src.features.retrieval import index_manifest
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K
 
-REPORT_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
+REPORT_ROOT = EVAL_REPORTS_DIR
 
 # Every axis this runner may touch is pinned here, not read from the environment
 # - a paid causal comparison must not silently measure a different profile,

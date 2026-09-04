@@ -85,3 +85,43 @@ def test_web_import_check_detects_an_injected_violation(tmp_path: Path) -> None:
     offender.write_text("from src.domain.models import Citation\n", encoding="utf-8")
 
     assert "src.domain.models" in _imported_module_paths(offender)
+
+
+FEATURES_ROOT = SRC_ROOT / "features"
+
+# src/features/ orchestrates ports; it must never bind a web framework or reach
+# into the primary (driving) adapter. The query router lived here before the
+# 2026-09-04 architecture remediation and was the sole violation. Imports of
+# src.adapters.secondary stay legal: the eval runners construct real adapters
+# deliberately.
+FEATURES_FORBIDDEN_TOP_LEVEL = {"fastapi"}
+FEATURES_FORBIDDEN_PACKAGES = ("src.adapters.primary",)
+
+
+def test_features_layer_never_imports_fastapi_or_primary_adapters() -> None:
+    violations: dict[str, set[str]] = {}
+    for py_file in FEATURES_ROOT.rglob("*.py"):
+        found = _imported_top_level_modules(py_file) & FEATURES_FORBIDDEN_TOP_LEVEL
+        found |= {
+            module
+            for module in _imported_module_paths(py_file)
+            for package in FEATURES_FORBIDDEN_PACKAGES
+            if module == package or module.startswith(package + ".")
+        }
+        if found:
+            violations[str(py_file)] = found
+    assert not violations, f"src/features imported a web framework or a primary adapter: {violations}"
+
+
+def test_features_import_check_detects_an_injected_violation(tmp_path: Path) -> None:
+    """Guards the guard: a checker that silently matched nothing would pass the
+    test above forever."""
+    offender = tmp_path / "src" / "features" / "query" / "offender.py"
+    offender.parent.mkdir(parents=True)
+    offender.write_text(
+        "from fastapi import APIRouter\nfrom src.adapters.primary.http.deps import get_settings\n",
+        encoding="utf-8",
+    )
+
+    assert "fastapi" in _imported_top_level_modules(offender)
+    assert "src.adapters.primary.http.deps" in _imported_module_paths(offender)

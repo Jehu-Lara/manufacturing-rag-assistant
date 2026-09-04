@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import EVAL_REPORTS_DIR
 from src.domain.models import ExpansionMode, IndexProfile
 from src.domain.policies import RefusalPolicy, top1_semantic_score_from_results
 from src.domain.ports import RetrieverPort
@@ -11,7 +12,7 @@ from src.features.evaluation._eval_retriever import assert_live_index_profile, b
 from src.features.evaluation.metrics import recall_at_k
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K
 
-REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
+REPORT_DIR = EVAL_REPORTS_DIR
 
 # Byte-stable invariant (src/core/config.py). Diagnostic only here — this
 # report never selects or ships a threshold, it just shows where each frozen

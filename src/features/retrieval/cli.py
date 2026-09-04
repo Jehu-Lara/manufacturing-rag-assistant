@@ -1,32 +1,18 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, SentenceTransformersEmbedder
 from src.adapters.secondary.lexical.bm25_lexical_index import Bm25LexicalIndex
 from src.adapters.secondary.vector.chroma_vector_store import ChromaVectorStore
 from src.core.config import load_settings
-from src.domain.models import ChunkMetadata
 from src.features.retrieval import index_manifest
+from src.features.retrieval.chunk_store import CHUNKS_FILE, load_chunks
 
-CHUNKS_FILE = Path(__file__).resolve().parent.parent.parent.parent / "ingestion" / "output" / "chunks.jsonl"
-
-
-def load_chunks(path: Path = CHUNKS_FILE) -> list[ChunkMetadata]:
-    if not path.exists():
-        raise FileNotFoundError(f"{path} not found — run `python -m src.features.ingestion.cli` first to produce it")
-    chunks = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            chunks.append(ChunkMetadata(**json.loads(line)))
-    return chunks
+__all__ = ["CHUNKS_FILE", "load_chunks", "run"]
 
 
 def run() -> None:
-    profile = index_manifest.resolve_index_profile()
-
     settings = load_settings()
+    profile = index_manifest.resolve_index_profile(settings)
     chunks = load_chunks()
 
     embedder = SentenceTransformersEmbedder()

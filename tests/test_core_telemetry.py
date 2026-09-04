@@ -119,3 +119,37 @@ def test_configure_tracing_is_idempotent_and_does_not_raise():
     configure_tracing(app=None)  # first call in this process may already have run via other tests' imports
     configure_tracing(app=None)  # must not raise on a second call
     assert get_tracer() is not None
+
+
+def test_telemetry_has_no_module_level_mutable_state():
+    """CLAUDE.md's prohibited-patterns rule: no module-level mutable singleton.
+    `_configured` was the last survivor of the pre-refactor _model/_CACHE/
+    _encoding globals the src/ migration eliminated."""
+    import ast
+    from pathlib import Path
+
+    module = Path(__file__).resolve().parent.parent / "src" / "core" / "telemetry.py"
+    tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+    assert not [n for n in ast.walk(tree) if isinstance(n, ast.Global)], "telemetry uses `global`"
+    assigned = {
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    assert "_configured" not in assigned
+
+
+def test_configure_tracing_installs_our_provider_and_reuses_it():
+    from fastapi import FastAPI
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+
+    configure_tracing(FastAPI())
+    first = trace.get_tracer_provider()
+    configure_tracing(FastAPI())
+
+    assert trace.get_tracer_provider() is first
+    assert isinstance(first, TracerProvider)
+    assert first.resource.attributes.get("service.name") == "rag4-api"

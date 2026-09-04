@@ -11,13 +11,14 @@ from typing import Any, Optional
 
 from src.adapters.secondary.llm.groq_openai_client import GroqOpenAiLlmClient
 from src.core.config import load_settings
+from src.core.paths import EVAL_REPORTS_DIR
 from src.domain.models import ExpansionMode, IndexProfile
 from src.features.evaluation import artifacts, eval_set_integrity, metrics
 from src.features.evaluation._eval_retriever import assert_live_index_profile, build_retriever
 from src.features.query.use_cases import QueryUseCase
 from src.features.retrieval.use_cases import HybridRetriever
 
-REPORT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "eval" / "reports"
+REPORT_DIR = EVAL_REPORTS_DIR
 
 # Deliberate simplification: QueryAnswer doesn't expose whether an LLM call
 # actually happened (a threshold-refusal and an LLM-self-refusal both produce

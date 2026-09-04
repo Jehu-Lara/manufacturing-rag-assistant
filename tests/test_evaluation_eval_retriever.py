@@ -85,7 +85,7 @@ def _patch_build_happy_path(monkeypatch: pytest.MonkeyPatch) -> dict[str, object
         _eval_retriever, "HybridRetriever", lambda vs, li, expansion_mode="off": ("retriever", expansion_mode)
     )
     monkeypatch.setattr(
-        _eval_retriever.index_manifest, "resolve_index_profile", lambda: "contextual-v1"
+        _eval_retriever.index_manifest, "resolve_index_profile", lambda *_: "contextual-v1"
     )
     monkeypatch.setattr(
         _eval_retriever.index_manifest,
