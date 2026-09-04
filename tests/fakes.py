@@ -75,7 +75,7 @@ class InMemoryVectorStore:
     def __init__(self, ready: bool = True) -> None:
         self._ready = ready
 
-    def build_collection(self, chunks: list[Any]) -> None:
+    def build_collection(self, chunks: list[Any], embedding_inputs: list[str]) -> None:
         raise NotImplementedError
 
     def query(self, text: str, top_n: int) -> list[tuple[str, float, dict[str, Any]]]:

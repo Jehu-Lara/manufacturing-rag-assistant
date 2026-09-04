@@ -36,7 +36,14 @@ def build_retriever(
         vector_store.validate_collection(
             expected_profile=profile, expected_count=manifest.chunk_count
         )
-        lexical_index.validate(chunk_ids)
+        # Identical to the cross-check src.adapters.primary.http.app.lifespan
+        # runs, deliberately: no eval runner may measure an index whose three
+        # artifacts physically disagree on profile, count, model OR content.
+        lexical_index.validate(
+            chunk_ids,
+            expected_chunks_sha256=manifest.chunks_sha256,
+            expected_lexical_profile=manifest.lexical_profile,
+        )
 
     return HybridRetriever(vector_store, lexical_index, expansion_mode=expansion_mode)
 

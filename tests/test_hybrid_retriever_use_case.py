@@ -13,7 +13,7 @@ class _StubVectorStore:
         self._hits = hits
         self._metadata_by_id = metadata_by_id
 
-    def build_collection(self, chunks: list[Any]) -> None:
+    def build_collection(self, chunks: list[Any], embedding_inputs: list[str]) -> None:
         raise NotImplementedError
 
     def query(self, text: str, top_n: int) -> list[tuple[str, float, dict[str, Any]]]:
@@ -30,7 +30,7 @@ class _StubLexicalIndex:
     def __init__(self, hits: list[tuple[str, float]]) -> None:
         self._hits = hits
 
-    def build_index(self, chunks: list[Any]) -> None:
+    def build_index(self, chunks: list[Any], *, chunks_sha256: str) -> None:
         raise NotImplementedError
 
     def query(self, text: str, top_n: int) -> list[tuple[str, float]]:

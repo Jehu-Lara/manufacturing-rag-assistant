@@ -28,7 +28,7 @@ def _mock_tracer():
 
 
 class _StubVectorStore:
-    def build_collection(self, chunks):
+    def build_collection(self, chunks, embedding_inputs):
         raise NotImplementedError
 
     def query(self, text, top_n):
@@ -42,7 +42,7 @@ class _StubVectorStore:
 
 
 class _StubLexicalIndex:
-    def build_index(self, chunks):
+    def build_index(self, chunks, *, chunks_sha256):
         raise NotImplementedError
 
     def query(self, text, top_n):

@@ -48,7 +48,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     vector_store.validate_collection(
         expected_profile=profile, expected_count=manifest.chunk_count
     )
-    lexical_index.validate([chunk.chunk_id for chunk in chunks])
+    # Identical to the cross-check src.features.evaluation._eval_retriever
+    # runs, deliberately: an index whose three artifacts physically disagree on
+    # profile, count, model OR content must not be servable or measurable.
+    lexical_index.validate(
+        [chunk.chunk_id for chunk in chunks],
+        expected_chunks_sha256=manifest.chunks_sha256,
+        expected_lexical_profile=manifest.lexical_profile,
+    )
 
     retriever = HybridRetriever(vector_store, lexical_index)
     llm_client = GroqOpenAiLlmClient.from_settings(

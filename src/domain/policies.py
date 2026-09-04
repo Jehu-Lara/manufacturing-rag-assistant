@@ -8,7 +8,15 @@ from dataclasses import dataclass
 from typing import Any, Optional, Sequence, cast
 
 from src.core.config import RefusalPolicyName
-from src.domain.models import Citation, DecisionReason, GateBand, RetrievalResult, SourceType
+from src.domain.models import (
+    ChunkMetadata,
+    Citation,
+    DecisionReason,
+    GateBand,
+    IndexProfile,
+    RetrievalResult,
+    SourceType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -298,3 +306,23 @@ class CitationResolver:
             extra={"event": event, "chunk_id": chunk_id},
         )
         return CitationResolution([], "unresolved_citation")
+
+
+def embedding_input(chunk: ChunkMetadata, profile: IndexProfile) -> str:
+    """The one place an index profile's embedding text is defined — a policy,
+    not an adapter detail, so a second vector store could not silently disagree
+    with the first. contextual-v1 prefixes the heading breadcrumb with an ASCII
+    '>' (ADR-008); raw-v1 embeds the bare body and is the tested rollback path.
+    Both store the raw chunk_text in the vector store — only the vectors differ.
+
+    This string is byte-stable: changing it invalidates the live index and
+    every __contextual-v1__ report that was measured against it."""
+    if profile == "contextual-v1":
+        return f"{chunk.document_title} > {chunk.section_heading}\n\n{chunk.chunk_text}"
+    if profile == "raw-v1":
+        return chunk.chunk_text
+    raise ValueError(f"unknown index profile: {profile!r}")
+
+
+def embedding_inputs(chunks: Sequence[ChunkMetadata], profile: IndexProfile) -> list[str]:
+    return [embedding_input(chunk, profile) for chunk in chunks]

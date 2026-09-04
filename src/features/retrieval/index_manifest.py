@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from src.adapters.secondary.embedder.sentence_transformers_embedder import MODEL_NAME, MODEL_REVISION
+from src.adapters.secondary.lexical.bm25_lexical_index import BM25_SCHEMA_VERSION, LEXICAL_PROFILE
 from src.core.config import Settings, load_settings
 from src.core.paths import CHUNKS_FILE, CORPUS_DIR, REPO_ROOT, RETRIEVAL_OUTPUT_DIR
 from src.domain.models import IndexProfile
@@ -25,6 +26,8 @@ _MANIFEST_FIELDS = (
     "embedding_revision",
     "build_commit",
     "chunk_count",
+    "lexical_profile",
+    "bm25_schema_version",
 )
 
 
@@ -90,6 +93,8 @@ class IndexManifest:
     embedding_revision: str
     build_commit: str
     chunk_count: int
+    lexical_profile: str
+    bm25_schema_version: int
 
 
 def build_manifest(
@@ -108,6 +113,8 @@ def build_manifest(
         embedding_revision=MODEL_REVISION,
         build_commit=resolve_build_commit(build_commit),
         chunk_count=chunk_count,
+        lexical_profile=LEXICAL_PROFILE,
+        bm25_schema_version=BM25_SCHEMA_VERSION,
     )
 
 
@@ -128,8 +135,10 @@ def read(path: Path = MANIFEST_FILE) -> IndexManifest:
         raise ValueError(f"{path} is missing manifest fields: {missing}")
     if data["index_profile"] not in ("raw-v1", "contextual-v1"):
         raise ValueError(f"{path} has an invalid index_profile: {data['index_profile']!r}")
-    if not isinstance(data["chunk_count"], int) or isinstance(data["chunk_count"], bool):
-        raise ValueError(f"{path} has a non-int chunk_count: {data['chunk_count']!r}")
+    for int_field in ("chunk_count", "bm25_schema_version"):
+        value = data[int_field]
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"{path} has a non-int {int_field}: {value!r}")
     return IndexManifest(**{field: data[field] for field in _MANIFEST_FIELDS})
 
 
@@ -162,6 +171,15 @@ def verify(
     if manifest.chunk_count != actual_chunk_count:
         mismatches.append(
             f"chunk_count stored {manifest.chunk_count}, computed {actual_chunk_count} from {chunks_path.name}"
+        )
+    if manifest.lexical_profile != LEXICAL_PROFILE:
+        mismatches.append(
+            f"lexical_profile stored {manifest.lexical_profile}, expected {LEXICAL_PROFILE}"
+        )
+    if manifest.bm25_schema_version != BM25_SCHEMA_VERSION:
+        mismatches.append(
+            f"bm25_schema_version stored {manifest.bm25_schema_version}, "
+            f"expected {BM25_SCHEMA_VERSION}"
         )
     if expected_profile is not None and manifest.index_profile != expected_profile:
         mismatches.append(

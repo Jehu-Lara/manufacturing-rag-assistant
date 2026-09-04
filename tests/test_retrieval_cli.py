@@ -73,15 +73,16 @@ class _SpyVectorStore:
         self.built_chunks: list[ChunkMetadata] | None = None
         _SpyVectorStore.instances.append(self)
 
-    def build_collection(self, chunks: list[ChunkMetadata]) -> None:
+    def build_collection(self, chunks: list[ChunkMetadata], embedding_inputs: list[str]) -> None:
         self.built_chunks = list(chunks)
+        self.embedding_inputs = list(embedding_inputs)
 
 
 class _SpyLexical:
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
 
-    def build_index(self, chunks: list[ChunkMetadata]) -> None:
+    def build_index(self, chunks: list[ChunkMetadata], *, chunks_sha256: str) -> None:
         pass
 
 
