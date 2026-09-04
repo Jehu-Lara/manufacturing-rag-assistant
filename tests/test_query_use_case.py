@@ -288,10 +288,10 @@ class _CountingLLM(InMemoryLLMClient):
         self.schemas_seen: list[dict] = []
         self.calls = 0
 
-    async def generate_structured(self, system_prompt, user_prompt, schema, settings):
+    async def generate_structured(self, system_prompt, user_prompt, schema):
         self.calls += 1
         self.schemas_seen.append(schema)
-        return await super().generate_structured(system_prompt, user_prompt, schema, settings)
+        return await super().generate_structured(system_prompt, user_prompt, schema)
 
 
 def test_grounded_hard_refuse_below_floor_never_calls_llm():

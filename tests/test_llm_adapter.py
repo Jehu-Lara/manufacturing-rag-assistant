@@ -32,6 +32,12 @@ def _settings(provider: str = "groq") -> Settings:
     )
 
 
+def _client(provider: str = "groq", **overrides) -> GroqOpenAiLlmClient:
+    """Provider and credentials are constructor-injected now, so every test
+    builds its client from a Settings instead of passing one per call."""
+    return GroqOpenAiLlmClient.from_settings(_settings(provider), **overrides)
+
+
 def _response(content: str) -> MagicMock:
     message = MagicMock()
     message.content = content
@@ -79,7 +85,7 @@ def _run(coro):
 def test_valid_json_first_try_returns_immediately_no_retry_no_fallback(mock_groq_cls, mock_openai_cls):
     mock_groq_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    result = _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     assert mock_groq_cls.return_value.chat.completions.create.await_count == 1
@@ -93,7 +99,7 @@ def test_invalid_json_then_valid_on_repair_same_provider(mock_groq_cls, mock_ope
         _response(INVALID_JSON_TEXT), _response(VALID_JSON_TEXT), side_effect=True
     )
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    result = _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     assert mock_groq_cls.return_value.chat.completions.create.await_count == 2
@@ -108,7 +114,7 @@ def test_invalid_json_both_tries_falls_over_to_other_provider(mock_groq_cls, moc
     )
     mock_openai_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    result = _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     assert mock_groq_cls.return_value.chat.completions.create.await_count == 2
@@ -126,7 +132,7 @@ def test_both_providers_exhaust_repair_retries_raises_generation_error(mock_groq
     )
 
     with pytest.raises(GenerationError):
-        _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+        _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert mock_groq_cls.return_value.chat.completions.create.await_count == 2
     assert mock_openai_cls.return_value.chat.completions.create.await_count == 2
@@ -140,7 +146,7 @@ def test_rate_limit_backs_off_via_asyncio_sleep_and_retries_same_provider(mock_g
         _groq_rate_limit_error(), _response(VALID_JSON_TEXT), side_effect=True
     )
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    result = _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     assert mock_groq_cls.return_value.chat.completions.create.await_count == 2
@@ -156,7 +162,7 @@ def test_rate_limit_honors_retry_after_header(mock_groq_cls, mock_openai_cls, mo
         _groq_rate_limit_error(retry_after="7"), _response(VALID_JSON_TEXT), side_effect=True
     )
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    result = _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     mock_sleep.assert_called_once_with(7.0)
@@ -172,7 +178,7 @@ def test_rate_limit_backoff_exhausted_falls_over_to_secondary(mock_groq_cls, moc
     )
     mock_openai_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    result = _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     assert mock_groq_cls.return_value.chat.completions.create.await_count == 4
@@ -190,7 +196,7 @@ def test_groq_unsupported_json_schema_mode_retries_with_json_object_same_attempt
         _groq_unsupported_response_format_error(), _response(VALID_JSON_TEXT), side_effect=True
     )
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    result = _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     create_mock = mock_groq_cls.return_value.chat.completions.create
@@ -207,7 +213,7 @@ def test_groq_unsupported_json_schema_mode_retries_with_json_object_same_attempt
 def test_openai_as_primary_provider_used_when_configured(mock_groq_cls, mock_openai_cls):
     mock_openai_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
 
-    result = _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("openai")))
+    result = _run(_client("openai").generate_structured("system", "user", JSON_SCHEMA))
 
     assert result == VALID_PAYLOAD
     assert mock_openai_cls.return_value.chat.completions.create.await_count == 1
@@ -222,7 +228,7 @@ def test_provider_calls_enforce_completion_token_limit(mock_groq_cls, mock_opena
     )
     mock_openai_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
 
-    _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    _run(_client().generate_structured("system", "user", JSON_SCHEMA))
 
     for call in mock_groq_cls.return_value.chat.completions.create.await_args_list:
         assert call.kwargs["max_completion_tokens"] == MAX_COMPLETION_TOKENS
@@ -238,7 +244,7 @@ def test_unconfigured_fallback_is_skipped_instead_of_receiving_none(mock_groq_cl
     settings = _settings("groq").model_copy(update={"openai_api_key": None})
 
     with pytest.raises(GenerationError):
-        _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, settings))
+        _run(GroqOpenAiLlmClient.from_settings(settings).generate_structured("system", "user", JSON_SCHEMA))
 
     mock_openai_cls.assert_not_called()
 
@@ -251,7 +257,7 @@ def test_provider_exception_text_is_not_logged_or_returned(mock_groq_cls, mock_o
     settings = _settings("groq").model_copy(update={"openai_api_key": None})
 
     with caplog.at_level("ERROR"), pytest.raises(GenerationError) as exc_info:
-        _run(GroqOpenAiLlmClient().generate_structured("system", "user", JSON_SCHEMA, settings))
+        _run(GroqOpenAiLlmClient.from_settings(settings).generate_structured("system", "user", JSON_SCHEMA))
 
     assert sensitive_text not in caplog.text
     assert sensitive_text not in str(exc_info.value)
@@ -280,8 +286,8 @@ def test_allow_provider_fallback_false_never_calls_the_other_provider(mock_groq_
 
     with pytest.raises(GenerationError):
         _run(
-            GroqOpenAiLlmClient(allow_provider_fallback=False).generate_structured(
-                "system", "user", JSON_SCHEMA, _settings("groq")
+            _client(allow_provider_fallback=False).generate_structured(
+                "system", "user", JSON_SCHEMA
             )
         )
 
@@ -296,8 +302,8 @@ def test_trace_hook_records_content_free_physical_request(mock_groq_cls, mock_op
     events = []
 
     _run(
-        GroqOpenAiLlmClient(trace_hook=events.append).generate_structured(
-            "SENSITIVE-SYSTEM", "SENSITIVE-USER", JSON_SCHEMA, _settings("groq")
+        _client(trace_hook=events.append).generate_structured(
+            "SENSITIVE-SYSTEM", "SENSITIVE-USER", JSON_SCHEMA
         )
     )
 
@@ -321,8 +327,8 @@ def test_trace_hook_records_rate_limit_and_repair_events(mock_groq_cls, mock_ope
     events = []
 
     _run(
-        GroqOpenAiLlmClient(allow_provider_fallback=False, trace_hook=events.append).generate_structured(
-            "system", "user", JSON_SCHEMA, _settings("groq")
+        _client(allow_provider_fallback=False, trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA
         )
     )
 
@@ -345,8 +351,8 @@ def test_trace_hook_counts_failed_physical_attempts(mock_groq_cls, mock_openai_c
     events = []
 
     _run(
-        GroqOpenAiLlmClient(trace_hook=events.append).generate_structured(
-            "system", "user", JSON_SCHEMA, _settings("groq")
+        _client(trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA
         )
     )
 
@@ -367,8 +373,8 @@ def test_unconfigured_primary_does_not_emit_provider_fallback(mock_openai_cls):
     events = []
     settings = _settings("groq").model_copy(update={"groq_api_key": None})
     _run(
-        GroqOpenAiLlmClient(trace_hook=events.append).generate_structured(
-            "system", "user", JSON_SCHEMA, settings
+        GroqOpenAiLlmClient.from_settings(settings, trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA
         )
     )
     fallbacks = [e for e in events if e.event == "provider_fallback"]
@@ -384,8 +390,8 @@ def test_trace_hook_counts_schema_fallback_as_two_attempts(mock_groq_cls, mock_o
     events = []
 
     _run(
-        GroqOpenAiLlmClient(allow_provider_fallback=False, trace_hook=events.append).generate_structured(
-            "system", "user", JSON_SCHEMA, _settings("groq")
+        _client(allow_provider_fallback=False, trace_hook=events.append).generate_structured(
+            "system", "user", JSON_SCHEMA
         )
     )
 
@@ -413,8 +419,8 @@ def test_production_trace_sink_logs_call_shape_without_any_content(
 
     with caplog.at_level("INFO", logger="src.adapters.secondary.llm.groq_openai_client"):
         _run(
-            GroqOpenAiLlmClient(allow_provider_fallback=False, trace_hook=log_llm_trace).generate_structured(
-                "SENSITIVE-SYSTEM-PROMPT", "SENSITIVE-USER-QUESTION", JSON_SCHEMA, _settings("groq")
+            _client(allow_provider_fallback=False, trace_hook=log_llm_trace).generate_structured(
+                "SENSITIVE-SYSTEM-PROMPT", "SENSITIVE-USER-QUESTION", JSON_SCHEMA
             )
         )
 
@@ -494,9 +500,9 @@ def test_rate_limit_error_text_reaches_neither_the_trace_event_nor_its_log_line(
     with caplog.at_level("INFO", logger="src.adapters.secondary.llm.groq_openai_client"):
         with pytest.raises(GenerationError):
             _run(
-                GroqOpenAiLlmClient(
+                _client(
                     allow_provider_fallback=False, trace_hook=_recording_and_logging_hook(events)
-                ).generate_structured("system", "user", JSON_SCHEMA, _settings("groq"))
+                ).generate_structured("system", "user", JSON_SCHEMA)
             )
 
     # The shape IS captured — this is not passing by emitting nothing.
@@ -525,9 +531,9 @@ def test_unexpected_exception_text_reaches_neither_the_trace_event_nor_its_log_l
     with caplog.at_level("INFO", logger="src.adapters.secondary.llm.groq_openai_client"):
         with pytest.raises(GenerationError):
             _run(
-                GroqOpenAiLlmClient(
+                _client(
                     allow_provider_fallback=False, trace_hook=_recording_and_logging_hook(events)
-                ).generate_structured("system", "user", JSON_SCHEMA, _settings("groq"))
+                ).generate_structured("system", "user", JSON_SCHEMA)
             )
 
     assert any(e.event == "physical_failed" for e in events)
@@ -552,9 +558,9 @@ def test_fail_fast_backoff_raises_without_sleeping_when_fallback_disabled(
 
     with pytest.raises(GenerationError):
         _run(
-            GroqOpenAiLlmClient(
+            _client(
                 allow_provider_fallback=False, rate_limit_backoff_seconds=()
-            ).generate_structured("system", "user", JSON_SCHEMA, _settings("groq"))
+            ).generate_structured("system", "user", JSON_SCHEMA)
         )
 
     assert mock_groq_cls.return_value.chat.completions.create.await_count == 1
@@ -572,8 +578,8 @@ def test_fail_fast_backoff_tries_fallback_immediately_without_sleeping(
     mock_openai_cls.return_value = _async_client_with_create(_response(VALID_JSON_TEXT))
 
     result = _run(
-        GroqOpenAiLlmClient(rate_limit_backoff_seconds=()).generate_structured(
-            "system", "user", JSON_SCHEMA, _settings("groq")
+        _client(rate_limit_backoff_seconds=()).generate_structured(
+            "system", "user", JSON_SCHEMA
         )
     )
 
@@ -590,9 +596,9 @@ def test_sdk_client_reused_across_calls_and_closed_by_aclose(mock_groq_cls, mock
     groq_client.close = AsyncMock()
     mock_groq_cls.return_value = groq_client
 
-    client = GroqOpenAiLlmClient()
-    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
-    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    client = _client()
+    _run(client.generate_structured("system", "user", JSON_SCHEMA))
+    _run(client.generate_structured("system", "user", JSON_SCHEMA))
 
     assert mock_groq_cls.call_count == 1
     assert groq_client.chat.completions.create.await_count == 2
@@ -608,13 +614,13 @@ def test_aclose_is_idempotent_and_safe_without_calls(mock_groq_cls, mock_openai_
     groq_client.close = AsyncMock()
     mock_groq_cls.return_value = groq_client
 
-    fresh = GroqOpenAiLlmClient()
+    fresh = _client()
     _run(fresh.aclose())
     _run(fresh.aclose())
     mock_groq_cls.assert_not_called()
 
-    used = GroqOpenAiLlmClient()
-    _run(used.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
+    used = _client()
+    _run(used.generate_structured("system", "user", JSON_SCHEMA))
     _run(used.aclose())
     _run(used.aclose())
     groq_client.close.assert_awaited_once()
@@ -636,16 +642,24 @@ def test_credential_change_rebuilds_provider_client_without_storing_secret(mock_
         log_level="INFO",
     )
 
-    client = GroqOpenAiLlmClient()
-    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
-    _run(client.generate_structured("system", "user", JSON_SCHEMA, rotated))
+    # Credentials are per-instance since Bucket 2, so rotation means building a
+    # new client rather than passing a different Settings to the next call.
+    # Each client builds and owns its own SDK client, and neither keeps the
+    # secret anywhere reachable.
+    original = _client()
+    _run(original.generate_structured("system", "user", JSON_SCHEMA))
+    rotated_client = GroqOpenAiLlmClient.from_settings(rotated)
+    _run(rotated_client.generate_structured("system", "user", JSON_SCHEMA))
 
     assert mock_groq_cls.call_count == 2
+    for client in (original, rotated_client):
+        assert "rotated-key" not in repr(client._clients)
+        assert "groq-test-key" not in repr(client._clients)
+        assert "rotated-key" not in str(vars(client))
+        assert "groq-test-key" not in str(vars(client))
+    _run(original.aclose())
     first_client.close.assert_awaited_once()
-    second_client.close.assert_not_called()
-    assert "rotated-key" not in repr(client._clients)
-    assert "groq-test-key" not in repr(client._clients)
-    _run(client.aclose())
+    _run(rotated_client.aclose())
     second_client.close.assert_awaited_once()
 
 
@@ -659,12 +673,60 @@ def test_aclose_attempts_every_client_and_raises_group_on_failure(mock_groq_cls,
     mock_groq_cls.return_value = groq_client
     mock_openai_cls.return_value = openai_client
 
-    client = GroqOpenAiLlmClient()
-    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("groq")))
-    _run(client.generate_structured("system", "user", JSON_SCHEMA, _settings("openai")))
+    # One client reaches both providers through fallback, so aclose() still has
+    # two cached SDK clients to close — the property under test. The groq one
+    # raises; the openai one must still be attempted.
+    mock_groq_cls.return_value = groq_client
+    groq_client.chat.completions.create.side_effect = RuntimeError("groq down")
+
+    client = _client()
+    _run(client.generate_structured("system", "user", JSON_SCHEMA))
 
     with pytest.raises(ExceptionGroup) as exc_info:
         _run(client.aclose())
     groq_client.close.assert_awaited_once()
     openai_client.close.assert_awaited_once()
     assert any(isinstance(e, RuntimeError) for e in exc_info.value.exceptions)
+
+
+# --- Bucket 2: Settings leaves the port, provider + credentials injected ---
+
+
+def test_generate_structured_takes_no_settings_argument():
+    """The port is a domain type; a Settings parameter drags src/core/config
+    into every implementation and every fake. Provider and credentials are
+    construction-time facts, not per-call ones."""
+    import inspect
+
+    from src.domain.ports import LLMClientPort
+
+    params = list(inspect.signature(LLMClientPort.generate_structured).parameters)
+    assert params == ["self", "system_prompt", "user_prompt", "schema"]
+
+
+def test_domain_ports_does_not_import_core_config():
+    import ast
+    from pathlib import Path
+
+    module = Path(__file__).resolve().parent.parent / "src" / "domain" / "ports.py"
+    tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+    imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    assert "src.core.config" not in imported
+
+
+def test_from_settings_carries_provider_and_both_keys():
+    client = GroqOpenAiLlmClient.from_settings(_settings("openai"), allow_provider_fallback=False)
+
+    assert client._provider == "openai"
+    assert client._allow_provider_fallback is False
+    assert client._api_key_for("groq") == "groq-test-key"
+    assert client._api_key_for("openai") == "openai-test-key"
+
+
+def test_client_never_holds_a_key_in_plain_text():
+    """Keys are held as SecretStr and unwrapped only at the SDK boundary, so
+    neither repr() nor vars() nor a traceback frame can carry one."""
+    client = GroqOpenAiLlmClient.from_settings(_settings("groq"))
+
+    assert "groq-test-key" not in repr(client)
+    assert "groq-test-key" not in str(vars(client))

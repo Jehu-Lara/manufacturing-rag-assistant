@@ -30,7 +30,7 @@ class InMemoryLLMClient:
         self._error = error
 
     async def generate_structured(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Any
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
         if self._error is not None:
             raise self._error

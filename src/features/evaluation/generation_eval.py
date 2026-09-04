@@ -52,7 +52,7 @@ def _build_use_case_and_retriever(
 ) -> tuple[QueryUseCase, HybridRetriever, GroqOpenAiLlmClient]:
     settings = load_settings()
     retriever = build_retriever(expansion_mode, expected_profile=index_profile)
-    llm_client = GroqOpenAiLlmClient()
+    llm_client = GroqOpenAiLlmClient.from_settings(settings)
     return QueryUseCase(retriever, llm_client, settings), retriever, llm_client
 
 

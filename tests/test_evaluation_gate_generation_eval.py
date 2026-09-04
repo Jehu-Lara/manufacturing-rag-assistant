@@ -62,7 +62,7 @@ class _ScriptedRetriever:
 def _fake_llm_factory(emit_physical: bool = True):
     def factory(hook):
         class _Fake:
-            async def generate_structured(self, system_prompt, user_prompt, schema, settings):
+            async def generate_structured(self, system_prompt, user_prompt, schema):
                 if emit_physical:
                     hook(
                         LlmTraceEvent(
@@ -112,14 +112,14 @@ def test_within_repeat_cache_reuses_byte_identical_prompt():
     calls = []
 
     class _Inner:
-        async def generate_structured(self, sp, up, schema, settings):
+        async def generate_structured(self, sp, up, schema):
             calls.append((sp, up))
             return {"answer": "x", "citations": [], "refused": False}
 
     cache = gge.WithinRepeatCache(_Inner())
-    asyncio.run(cache.generate_structured("S", "U", {"a": 1}, _settings()))
-    asyncio.run(cache.generate_structured("S", "U", {"a": 1}, _settings()))
-    asyncio.run(cache.generate_structured("S", "OTHER", {"a": 1}, _settings()))
+    asyncio.run(cache.generate_structured("S", "U", {"a": 1}))
+    asyncio.run(cache.generate_structured("S", "U", {"a": 1}))
+    asyncio.run(cache.generate_structured("S", "OTHER", {"a": 1}))
 
     assert cache.logical_calls == 3
     assert cache.forwarded_calls == 2
@@ -768,7 +768,7 @@ def test_run_matrix_closes_llm_client_each_repeat():
 
     def factory(hook):
         class _Fake:
-            async def generate_structured(self, sp, up, schema, settings):
+            async def generate_structured(self, sp, up, schema):
                 return {"answer": "x", "citations": [], "refused": True}
 
             async def aclose(self) -> None:

@@ -51,7 +51,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     lexical_index.validate([chunk.chunk_id for chunk in chunks])
 
     retriever = HybridRetriever(vector_store, lexical_index)
-    llm_client = GroqOpenAiLlmClient(trace_hook=log_llm_trace, rate_limit_backoff_seconds=())
+    llm_client = GroqOpenAiLlmClient.from_settings(
+        settings, trace_hook=log_llm_trace, rate_limit_backoff_seconds=()
+    )
 
     try:
         app.state.settings = settings

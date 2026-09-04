@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from src.core.config import Settings
 from src.domain.models import ChunkMetadata, RetrievalResult
 
 
@@ -36,5 +35,5 @@ class RetrieverPort(Protocol):
 @runtime_checkable
 class LLMClientPort(Protocol):
     async def generate_structured(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]: ...

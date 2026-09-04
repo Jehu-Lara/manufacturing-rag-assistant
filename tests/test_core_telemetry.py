@@ -67,7 +67,9 @@ def test_llm_adapter_creates_llm_generate_span():
             "_generate_structured_impl",
             return_value={"answer": "x", "citations": [], "refused": False},
         ):
-            asyncio.run(GroqOpenAiLlmClient().generate_structured("sys", "user", {}, settings))
+            asyncio.run(
+                GroqOpenAiLlmClient.from_settings(settings).generate_structured("sys", "user", {})
+            )
     tracer.start_as_current_span.assert_called_once_with("llm.generate")
 
 

@@ -127,14 +127,14 @@ class WithinRepeatCache:
         self.forwarded_calls = 0
 
     async def generate_structured(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
         self.logical_calls += 1
         key = (system_prompt, user_prompt, _schema_key(schema))
         if key in self._cache:
             return cast("dict[str, Any]", json.loads(json.dumps(self._cache[key])))
         self.forwarded_calls += 1
-        result = await self._inner.generate_structured(system_prompt, user_prompt, schema, settings)
+        result = await self._inner.generate_structured(system_prompt, user_prompt, schema)
         self._cache[key] = cast("dict[str, Any]", json.loads(json.dumps(result)))
         return result
 
@@ -952,7 +952,9 @@ def run(
     if llm_factory is None:
 
         def llm_factory(hook: TraceHook) -> LLMClientPort:
-            return GroqOpenAiLlmClient(allow_provider_fallback=False, trace_hook=hook)
+            return GroqOpenAiLlmClient.from_settings(
+                settings, allow_provider_fallback=False, trace_hook=hook
+            )
 
     holdout_data = gate_holdout_integrity.load_gate_holdout(holdout_path)
     holdout_questions = holdout_data["questions"]

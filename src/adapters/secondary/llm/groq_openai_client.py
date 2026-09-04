@@ -12,7 +12,7 @@ import groq
 import openai
 from pydantic import SecretStr
 
-from src.core.config import Settings
+from src.core.config import LlmProvider, Settings
 from src.core.errors import GenerationError
 from src.core.telemetry import get_tracer
 
@@ -107,11 +107,6 @@ _JSON_SCHEMA_RETRY_ERROR_TYPES = (groq.BadRequestError, groq.UnprocessableEntity
 
 def _other_provider(provider: str) -> str:
     return "openai" if provider == "groq" else "groq"
-
-
-def _api_key_for(provider: str, settings: Settings) -> Optional[str]:
-    secret: Optional[SecretStr] = settings.groq_api_key if provider == "groq" else settings.openai_api_key
-    return secret.get_secret_value() if secret is not None else None
 
 
 def _provider_error_fields(provider: str, exc: Exception) -> dict[str, object]:
@@ -251,22 +246,50 @@ class GroqOpenAiLlmClient:
     other in-flight request under a single-process/single-worker deploy."""
 
     def __init__(
-        self, *, allow_provider_fallback: bool = True, trace_hook: Optional[TraceHook] = None,
+        self, *, provider: LlmProvider, groq_api_key: Optional[SecretStr] = None,
+        openai_api_key: Optional[SecretStr] = None,
+        allow_provider_fallback: bool = True, trace_hook: Optional[TraceHook] = None,
         rate_limit_backoff_seconds: tuple[float, ...] = RATE_LIMIT_BACKOFF_SECONDS,
     ) -> None:
-        """Defaults reproduce production exactly: fallback ON, no trace hook.
-        The Phase 3C generation runner sets `allow_provider_fallback=False`
+        """Provider and credentials are construction-time facts, not per-call
+        ones — that is what keeps `Settings` out of `LLMClientPort`. Keys are
+        held as `SecretStr` and unwrapped only in `_api_key_for`, the single
+        SDK boundary, so neither repr(), vars(), nor a traceback frame carries
+        one. Rotating a key or switching provider means building a new client.
+
+        The other defaults reproduce production exactly: fallback ON, no trace
+        hook. The Phase 3C generation runner sets `allow_provider_fallback=False`
         (so a rate-limit fallback can't confound a causal comparison) and a
         `trace_hook` for physical-call accounting. `rate_limit_backoff_seconds=()`
         means fail-fast: one physical attempt per provider, no sleep. Serving
         wires fail-fast (a user-facing query must not sleep 105s behind
         nginx/httpx 60s timeouts) while keeping provider fallback; offline
         evaluation keeps the default long schedule."""
+        self._provider: LlmProvider = provider
+        self._groq_api_key = groq_api_key
+        self._openai_api_key = openai_api_key
         self._allow_provider_fallback = allow_provider_fallback
         self._trace_hook = trace_hook
         self._rate_limit_backoff_seconds = tuple(rate_limit_backoff_seconds)
         self._clients: dict[str, tuple[Optional[str], Any]] = {}
         self._lock = asyncio.Lock()
+
+    @classmethod
+    def from_settings(cls, settings: Settings, **overrides: Any) -> "GroqOpenAiLlmClient":
+        """Composition-root convenience. `overrides` forwards the three
+        non-credential keywords (allow_provider_fallback, trace_hook,
+        rate_limit_backoff_seconds)."""
+        return cls(
+            provider=settings.llm_provider,
+            groq_api_key=settings.groq_api_key,
+            openai_api_key=settings.openai_api_key,
+            **overrides,
+        )
+
+    def _api_key_for(self, provider: str) -> Optional[str]:
+        """The single unwrap point — everything above this line handles SecretStr."""
+        secret = self._groq_api_key if provider == "groq" else self._openai_api_key
+        return secret.get_secret_value() if secret is not None else None
 
     def _emit(self, event: LlmTraceEvent) -> None:
         if self._trace_hook is not None:
@@ -367,22 +390,22 @@ class GroqOpenAiLlmClient:
         return response
 
     async def generate_structured(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
         with get_tracer().start_as_current_span("llm.generate"):
-            return await self._generate_structured_impl(system_prompt, user_prompt, schema, settings)
+            return await self._generate_structured_impl(system_prompt, user_prompt, schema)
 
     async def _generate_structured_impl(
-        self, system_prompt: str, user_prompt: str, schema: dict[str, Any], settings: Settings
+        self, system_prompt: str, user_prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
-        primary = settings.llm_provider
+        primary = self._provider
         fallback = _other_provider(primary)
         providers = (primary, fallback) if self._allow_provider_fallback else (primary,)
         attempts_summary: list[str] = []
 
         attempted_any = False
         for provider in providers:
-            api_key = _api_key_for(provider, settings)
+            api_key = self._api_key_for(provider)
             if api_key is None:
                 logger.warning(
                     "provider skipped because its API key is not configured",
