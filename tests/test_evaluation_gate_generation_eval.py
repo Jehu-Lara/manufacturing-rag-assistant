@@ -11,6 +11,7 @@ from src.adapters.secondary.llm.groq_openai_client import LlmTraceEvent
 from src.core.config import Settings
 from src.domain.models import RetrievalResult
 from src.features.evaluation import gate_generation_eval as gge
+from src.features.evaluation.gate_eval import runner as gate_runner
 
 _GREY_TEXT = (
     "Net positive suction head available (NPSHA) is a property of the system; net positive "
@@ -505,7 +506,11 @@ def test_verify_prereqs_rejects_provider_mismatch(monkeypatch, tmp_path):
         gge._verify_prereqs(tmp_path / "h.json", tmp_path / "r.json", "openai")
 
 
-def test_run_end_to_end_with_injected_fakes(tmp_path: Path):
+def build_fake_run(tmp_path: Path) -> Path:
+    """One definition of "a fake run", shared with
+    tests/test_gate_eval_artifact_contract.py so the artifact tripwire cannot
+    drift from the behaviour test. Injected fakes only — no provider call, no
+    cost."""
     questions = _holdout_questions()
     holdout_path = tmp_path / "holdout.json"
     holdout_path.write_text(
@@ -523,7 +528,7 @@ def test_run_end_to_end_with_injected_fakes(tmp_path: Path):
     scores = {q["question"]: 0.57 for q in questions}
     scores.update({q["query"]: 0.57 for q in reg_queries})
 
-    run_dir = gge.run(
+    return gge.run(
         holdout_path=holdout_path,
         regression_path=regression,
         out_root=tmp_path / "out",
@@ -535,6 +540,10 @@ def test_run_end_to_end_with_injected_fakes(tmp_path: Path):
         canary_repeats=1,
         now=datetime(2026, 8, 31, 12, 0, 0, tzinfo=timezone.utc),
     )
+
+
+def test_run_end_to_end_with_injected_fakes(tmp_path: Path):
+    run_dir = build_fake_run(tmp_path)
 
     assert run_dir.name == "gate_generation_eval_20260831T120000Z"
     outcomes = [json.loads(line) for line in (run_dir / "outcomes.jsonl").read_text().splitlines()]
@@ -796,7 +805,9 @@ def test_run_matrix_closes_llm_when_cache_construction_fails(monkeypatch: pytest
     def _boom(inner):
         raise RuntimeError("cache boom")
 
-    monkeypatch.setattr(gge, "WithinRepeatCache", _boom)
+    # run_matrix lives in gate_eval.runner since the 2026-09-04 split, so the
+    # name has to be patched where it is looked up, not on the facade.
+    monkeypatch.setattr(gate_runner, "WithinRepeatCache", _boom)
     questions = [{"id": "q1", "question": "q?", "language": "en", "answerable": False}]
     replay = gge.ReplayRetriever({"q?": []})
     with pytest.raises(RuntimeError, match="cache boom"):
