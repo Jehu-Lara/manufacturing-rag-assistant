@@ -290,3 +290,46 @@ re-stamped.
 **Not done, and deliberately owner-gated:** the paid `gate_generation_eval` A/B run, the
 `REFUSAL_POLICY` default flip to `grounded_review`, moving ADR-009 to Accepted, and any Hugging
 Face deployment. None of those is implied by this work.
+
+---
+
+## Addendum, 2026-09-01 — Review-Floor Calibration Sweep (PR #6)
+
+A calibration grid sweep was executed to explore whether the pre-registered review floor `0.5500` could be lowered or augmented with lexical/semantic agreement signals to recover borderline queries without leaking unanswerables.
+
+- **Sweep Grid:** 125 rows evaluated (105 `eval_set` v1.1.0 questions + 20 regression controls) across 24 candidate classification rules (192 statistic cells):
+  - 6 candidate floors: `[0.50, 0.51, 0.52, 0.53, 0.54, 0.55]`
+  - 4 agreement signals: `none`, `sem_top1_in_bm25_top_n`, `sem_bm25_top1_agree`, and `channels_overlap_top_n`
+- **Global Evaluation Gates (`assess_rule` in `src/features/evaluation/floor_sweep.py`):**
+  - **G1 (baseline fidelity):** verifies that classifying rows under the baseline rule `(0.5500, "none")` reproduces canonical `RefusalPolicy` exactly (evaluates identical PASS for all candidates).
+  - **G2 (false-refusal reduction):** candidate wrongly hard-refused answerables in `eval_set` must strictly decrease in at least one language and not worsen in any language compared to baseline.
+  - **G3 (unanswerable containment):** newly reviewed unanswerables in `eval_set` must be $\le 2$ pooled and $\le 1$ per language.
+  - **G4 (regression controls):** all pinned controls (`r001`, `r002`, `r018` $\to$ `grounded_review`; `r019`, `r020` $\to$ `hard_refuse`) must match, no previously-admitted answerable control may be hard refused, and no previously-refused unanswerable control may leave `hard_refuse`.
+- **Findings:**
+  - **0 of 24 candidate rules** proved mechanically eligible.
+  - Every candidate rule fails at least one global gate (G2, G3, or G4):
+    - With signal `none`, floors below 0.5500 either fail G3 ($\le 0.53$: 3–6 newly-reviewed unanswerables incl. `q093`) or fail G4 (`(0.54, none)`: `r020` at 0.5420 enters `grounded_review`).
+    - Lexical signals never yield eligibility: `sem_top1_in_bm25_top_n` and `sem_bm25_top1_agree` fail G2 at every floor (no false-refusal reduction — ES queries get zero BM25 overlap); `channels_overlap_top_n` preserves G2 below 0.55 but fails G3 ($\le 0.53$) or G4 (0.54, again via `r020`).
+  - **Outcome:** Validated the pre-registered floor of `0.5500` as the Pareto-optimal invariant. A formal "diagnóstico sin cambio" (no-op) was reached with **zero production code changes**. Full provenance and table: [`docs/eval/floor_sweep_summary.md`](docs/eval/floor_sweep_summary.md).
+
+---
+
+## Addendum, 2026-09-02 — Phase 3C Generation Pilot & Adversarial Audit (PR #7)
+
+The Phase 3C causal generation evaluation runner (`gate_generation_eval.py`) was executed in an exploratory single-repeat pilot on Groq `openai/gpt-oss-120b`, followed by an independent adversarial audit and hardening.
+
+- **Pilot Execution (`gate_generation_eval_20260902T225839Z`):**
+  - Evaluated on the frozen 48-question holdout (`eval/gate_holdout_v1.0.0.json`) and 5 regression canaries (`r001`, `r002`, `r018`, `r019`, `r020`) comparing `binary` vs `grounded_review` on the live `contextual-v1` index.
+  - **False Refusal:** Dropped from **0.333** (33.3%) under `binary` to **0.083** (8.3%) under `grounded_review` — an absolute reduction of 25 percentage points (75% relative).
+  - **Unsafe Answers:** **0 unanswerable queries answered** in either arm; correct refusal was 1.000 for both.
+  - **Rate Limiting & Gate Status:** 39 outcomes were affected by Groq rate limits (48 recorded 429 events), and canary `r002` experienced a `generation_error`. Because the preregistered release gate requires 3 full repeats without 429s and blind checklist grading, this pilot did **not** pass release gates and did **not** flip the shipped default policy (`binary` remains). Full report: [`docs/eval/gate-generation-pilot-20260902.md`](docs/eval/gate-generation-pilot-20260902.md).
+- **Adversarial Challenger Verification Suite (`tests/test_adversarial_challenger.py`):**
+  - A 14-test adversarial suite was established to stress-test boundary invariants, cross-lingual consistency, and fail-closed mechanisms.
+  - **Score Inversion Theorem:** Formally proved that top-1 semantic scores exhibit the strict empirical ordering:
+    $$\text{Score}(q049) = 0.5562 > 0.5500 > \text{Score}(q093) = 0.5497 > \text{Score}(r020) = 0.5420 > \text{Score}(q072) = 0.5414$$
+    This proves that no scalar threshold can recover answerable query `q072` without first promoting unanswerables `q093` and `r020` into the review band, mathematically demonstrating that the refusal of `q072` is an unavoidable consequence of safety invariance under scalar scoring.
+- **Remediation of Audit Findings (H1, H2, H3, H5):**
+  - **H1 (`repeats_conform` gate):** Automated evaluation now strictly checks that holdout and canary repeats conform to the preregistered requirement (3 holdout repeats, 3 canary repeats); single-repeat pilot runs correctly fail automated release gates.
+  - **H2 (Immutable file verification):** During `--import-verdicts`, `gate_generation_eval` now verifies SHA-256 hashes of immutable artifacts (`outcomes.jsonl`, `retrieval.jsonl`, `blind_checklist.baseline.json`, `arm_map.sealed.json`) against `checksums.txt`, fail-closing if tampering is detected.
+  - **H3 (`checksums.import.txt`):** Importing human verdicts now writes a separate `checksums.import.txt` rather than overwriting the sealed `checksums.txt`, preserving run provenance.
+  - **H5 (Provider fallback accounting & portability):** Fixed `GroqOpenAiLlmClient` to emit `provider_fallback` only when a primary provider was actually attempted and failed (preventing unconfigured primaries from inflating fallback counts); updated adversarial tests to dynamically parse regression control scores directly from committed evaluation reports.
