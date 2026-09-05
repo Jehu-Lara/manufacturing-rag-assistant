@@ -150,3 +150,70 @@ def test_the_shipped_baseline_passes_its_own_gates() -> None:
     )
 
     assert all(check(baseline) for _, check in ablation_eval.GATES)
+
+
+def test_reranked_arm_is_a_named_arm() -> None:
+    assert ablation_eval.RERANKED_ARM in ablation_eval.ARMS
+
+
+def test_reranked_arm_shares_both_channels_with_the_baseline(monkeypatch) -> None:
+    """Only the reranker may vary. An arm that also rebuilt a channel would
+    measure two changes and attribute both to reranking."""
+
+    class _Store:
+        def query(self, text, top_n):
+            return []
+
+        def get_metadata(self, chunk_id):
+            raise NotImplementedError
+
+    store, lexical = _Store(), object()
+    base = ablation_eval.HybridRetriever(store, lexical)
+    monkeypatch.setattr(ablation_eval, "build_retriever", lambda *a, **k: base)
+    monkeypatch.setattr(ablation_eval, "_flag_reranker", lambda: object())
+
+    arm = ablation_eval.build_arm(ablation_eval.RERANKED_ARM)
+
+    assert arm._vector_store is store
+    assert arm._lexical_index is lexical
+    assert arm._reranker is not None
+
+
+def test_reranked_arm_window_covers_the_whole_fused_list() -> None:
+    """The fused list is at most 2 * top_n = 40. A window of 20 would leave the
+    tail unsorted, which is the safe production shape but understates what a
+    reranker can do; the experiment states its window explicitly either way."""
+    assert ablation_eval.RERANK_WINDOW == 20
+
+
+def test_latency_recording_reranker_times_each_call_and_delegates() -> None:
+    calls = []
+
+    class _Inner:
+        def rerank(self, query, candidates):
+            calls.append(query)
+            return [(chunk_id, 1.0) for chunk_id, _ in candidates]
+
+    timed = ablation_eval.LatencyRecordingReranker(_Inner())
+    out = timed.rerank("q", [("c1", "t1")])
+
+    assert out == [("c1", 1.0)]
+    assert calls == ["q"]
+    assert len(timed.latencies_ms) == 1
+    assert timed.latencies_ms[0] >= 0.0
+
+
+def test_report_states_measured_rerank_latency_when_present() -> None:
+    """The audit's stated unknown for this arm is latency, not recall. A report
+    that omits it leaves the deploy decision unanswerable."""
+    results = {
+        ablation_eval.BASELINE_ARM: _arm(ablation_eval.BASELINE_ARM, {"q1": True}),
+        ablation_eval.RERANKED_ARM: _arm(ablation_eval.RERANKED_ARM, {"q1": True}),
+    }
+
+    report = ablation_eval.render_report(
+        results, "1.1.0", "contextual-v1", rerank_latencies_ms=[10.0, 20.0, 30.0, 40.0]
+    )
+
+    assert "p50" in report and "p95" in report
+    assert "ms" in report

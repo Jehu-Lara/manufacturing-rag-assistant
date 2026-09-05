@@ -188,3 +188,97 @@ def test_expansion_mode_semantic_still_computes_the_expansion(monkeypatch):
     HybridRetriever(vs, lx, expansion_mode="semantic").retrieve("What is NPSHA?", k=1)
 
     assert calls == ["What is NPSHA?"]
+
+
+def _retriever_with(n: int, *, reranker: Any = None, rerank_window: int = 20) -> HybridRetriever:
+    """n deterministic chunks, both channels ranking them identically, so the
+    fused order is stable and a reranker's effect is unambiguous."""
+    ids = [f"c{i:02d}" for i in range(n)]
+    metadata = {cid: {"document_id": "doc", "chunk_text": f"text {cid}"} for cid in ids}
+    vector_store = _StubVectorStore(
+        hits=[(cid, 1.0 - i / 100, metadata[cid]) for i, cid in enumerate(ids)],
+        metadata_by_id=metadata,
+    )
+    lexical_index = _StubLexicalIndex(hits=[(cid, float(n - i)) for i, cid in enumerate(ids)])
+    kwargs: dict[str, Any] = {} if reranker is None else {"reranker": reranker, "rerank_window": rerank_window}
+    return HybridRetriever(vector_store, lexical_index, **kwargs)
+
+
+class _ReversingReranker:
+    """Deterministic, model-free: reverses whatever window it is handed. Enough
+    to prove the windowing/tail/gate contract without loading a cross-encoder."""
+
+    def __init__(self) -> None:
+        self.seen: list[list[str]] = []
+
+    def rerank(self, query: str, candidates: Any) -> list[tuple[str, float]]:
+        ids = [chunk_id for chunk_id, _ in candidates]
+        self.seen.append(list(ids))
+        return [(chunk_id, float(i)) for i, chunk_id in enumerate(reversed(ids))]
+
+
+def test_reranker_is_off_by_default() -> None:
+    assert _retriever_with(30)._reranker is None
+
+
+def test_reranker_permutes_only_the_window_and_keeps_the_tail() -> None:
+    baseline = [r.chunk_id for r in _retriever_with(30).retrieve("q", k=30)]
+
+    ids = [r.chunk_id for r in _retriever_with(30, reranker=_ReversingReranker()).retrieve("q", k=30)]
+
+    window = min(20, len(baseline))
+    assert ids[:window] == list(reversed(baseline[:window]))
+    assert ids[window:] == baseline[window:]
+    assert sorted(ids) == sorted(baseline)
+
+
+def test_reranker_never_changes_the_refusal_gate_input() -> None:
+    """The whole safety argument in one assertion: the score the gate reads is
+    identical with and without a reranker, because the semantic_rank == 1 result
+    is still present and its semantic_score is untouched."""
+    from src.domain.policies import top1_semantic_score_from_results
+
+    plain = _retriever_with(30).retrieve("q", k=30)
+    reranked = _retriever_with(30, reranker=_ReversingReranker()).retrieve("q", k=30)
+
+    assert top1_semantic_score_from_results(reranked) == top1_semantic_score_from_results(plain)
+
+
+def test_reranker_receives_the_chunk_text_not_the_id() -> None:
+    reranker = _ReversingReranker()
+    _retriever_with(30, reranker=reranker).retrieve("q", k=30)
+
+    assert reranker.seen and len(reranker.seen[0]) == 20
+
+
+def test_reranker_leaves_every_score_field_untouched() -> None:
+    """Reranking reorders objects; it must never rewrite semantic_score,
+    semantic_rank or fused_score, or every downstream report and the gate stop
+    meaning what they say."""
+    plain = {r.chunk_id: r for r in _retriever_with(30).retrieve("q", k=30)}
+    reranked = _retriever_with(30, reranker=_ReversingReranker()).retrieve("q", k=30)
+
+    for result in reranked:
+        assert result == plain[result.chunk_id]
+
+
+def test_a_reranker_that_drops_an_id_is_rejected() -> None:
+    class _Dropping:
+        def rerank(self, query: str, candidates: Any) -> list[tuple[str, float]]:
+            return [(candidates[0][0], 1.0)]
+
+    import pytest
+
+    with pytest.raises(ValueError, match="same id set"):
+        _retriever_with(30, reranker=_Dropping()).retrieve("q", k=30)
+
+
+def test_a_reranker_that_invents_an_id_is_rejected() -> None:
+    class _Inventing:
+        def rerank(self, query: str, candidates: Any) -> list[tuple[str, float]]:
+            return [(chunk_id, 1.0) for chunk_id, _ in candidates] + [("smuggled", 2.0)]
+
+    import pytest
+
+    with pytest.raises(ValueError, match="same id set"):
+        _retriever_with(30, reranker=_Inventing()).retrieve("q", k=30)

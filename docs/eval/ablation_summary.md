@@ -31,3 +31,25 @@ The lexical channel earns **no** exclusive rescue, and RRF fusion demotes 8 ques
 
 This is a measurement, not a decision. Removing or down-weighting the lexical channel is a separate owner call, and one evaluation set of 80 answerable questions over a 14-document corpus is thin evidence for a permanent architectural change. The obvious confounder to rule out first is RRF's rank-only fusion (k=60): it weights a BM25 rank-1 hit identically however weak its score is, so a near-miss lexical match can outrank a strong semantic one.
 
+---
+
+## Follow-up (2026-09-04): the confounder was real, and the mechanism was not the one named above
+
+`docs/eval/fusion_sweep_summary.md` ran the check this report asked for. The
+confounder is confirmed, but the wording above pointed at the wrong path.
+
+The claim above — a weak BM25 rank-1 outranking a strong semantic hit — accounts
+for only **4 of the 62** chunks that displace the gold chunk across the eight
+lost questions. The dominant mechanism is the both-channels bonus: at `k=60`
+over 20 candidates the within-channel rank curve spans just `1/61..1/80`
+(**1.31x**), while appearing in *both* rankings is worth roughly **2x**. So
+fusion degenerates into "how many channels found it", and a shared-but-mediocre
+chunk beats a semantic rank-1 that BM25 missed.
+
+Moving both levers together (`rrf_k10_sem_x2`) recovers **0.988** Recall@5 —
+identical to `semantic_only` in every language. So fixing the fusion stops BM25
+from subtracting; it still does not make BM25 add, and `semantic_only` remains
+ahead on MRR (0.835 vs 0.798).
+
+**None of that licenses editing `k`.** It was measured on the same 80 questions
+it would be tuned to. See that summary's "What must NOT happen next".
