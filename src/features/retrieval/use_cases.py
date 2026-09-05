@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from src.core.telemetry import get_tracer
 from src.domain.models import ExpansionMode, RetrievalResult
 from src.domain.policies import expand_query, fuse_rankings
-from src.domain.ports import LexicalIndexPort, VectorStorePort
+from src.domain.ports import LexicalIndexPort, RerankerPort, VectorStorePort
 
 DEFAULT_TOP_N = 20
 
@@ -26,10 +28,15 @@ class HybridRetriever:
         vector_store: VectorStorePort,
         lexical_index: LexicalIndexPort,
         expansion_mode: ExpansionMode = "off",
+        *,
+        reranker: Optional[RerankerPort] = None,
+        rerank_window: int = DEFAULT_TOP_N,
     ) -> None:
         self._vector_store = vector_store
         self._lexical_index = lexical_index
         self._expansion_mode = expansion_mode
+        self._reranker = reranker
+        self._rerank_window = rerank_window
 
     def retrieve(self, query_text: str, k: int = 5, top_n: int = DEFAULT_TOP_N) -> list[RetrievalResult]:
         with get_tracer().start_as_current_span("retrieval.hybrid.query"):
@@ -70,4 +77,30 @@ class HybridRetriever:
                     )
                 )
 
+            if self._reranker is not None:
+                fused = self._apply_reranker(query_text, fused)
+
             return fused[:k]
+
+    def _apply_reranker(self, query_text: str, fused: list[RetrievalResult]) -> list[RetrievalResult]:
+        """Permutes ONLY the first rerank_window entries and leaves the tail in
+        fused order. Nothing is added, dropped or deduplicated, so the result
+        with semantic_rank == 1 is still present and the refusal gate reads the
+        same score it would without a reranker (see
+        src.domain.policies.top1_semantic_score_from_results). A reranker that
+        truncated before the gate read it would silently retune 0.5999/0.5500.
+
+        Score fields are carried through untouched: reranking reorders objects,
+        it never rewrites what a channel measured."""
+        assert self._reranker is not None
+        window, tail = fused[: self._rerank_window], fused[self._rerank_window :]
+        if len(window) < 2:
+            return fused
+        by_id = {result.chunk_id: result for result in window}
+        scored = self._reranker.rerank(
+            query_text, [(r.chunk_id, str(r.metadata.get("chunk_text", ""))) for r in window]
+        )
+        reranked_ids = [chunk_id for chunk_id, _ in scored]
+        if len(reranked_ids) != len(window) or set(reranked_ids) != set(by_id):
+            raise ValueError("reranker must return the same id set it was given")
+        return [by_id[chunk_id] for chunk_id, _ in scored] + tail

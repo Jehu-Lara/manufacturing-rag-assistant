@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, Sequence, runtime_checkable
 
 from src.domain.models import ChunkMetadata, RetrievalResult
 
@@ -25,6 +25,17 @@ class VectorStorePort(Protocol):
 class LexicalIndexPort(Protocol):
     def build_index(self, chunks: list[ChunkMetadata], *, chunks_sha256: str) -> None: ...
     def query(self, text: str, top_n: int) -> list[tuple[str, float]]: ...
+
+
+@runtime_checkable
+class RerankerPort(Protocol):
+    """`candidates` is (chunk_id, text); the return is (chunk_id, score)
+    best-first over EXACTLY the same id set. Adding, dropping or deduplicating
+    an id is a contract violation the retriever rejects, because the refusal
+    gate's guarantee rests on the semantic_rank == 1 result still being
+    present."""
+
+    def rerank(self, query: str, candidates: Sequence[tuple[str, str]]) -> list[tuple[str, float]]: ...
 
 
 @runtime_checkable

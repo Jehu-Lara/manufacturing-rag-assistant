@@ -17,6 +17,7 @@ recall alone cannot satisfy the last one, so `compare` names the questions.
 from __future__ import annotations
 
 import argparse
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
@@ -29,7 +30,14 @@ from src.features.evaluation._eval_retriever import build_retriever
 from src.features.retrieval.use_cases import SEMANTIC_EXTRACTION_K, HybridRetriever
 
 BASELINE_ARM = "hybrid_word_lower"
-ARMS: tuple[str, ...] = (BASELINE_ARM, "semantic_only", "hybrid_snowball_bilingual")
+RERANKED_ARM = "hybrid_word_lower_reranked"
+ARMS: tuple[str, ...] = (BASELINE_ARM, "semantic_only", "hybrid_snowball_bilingual", RERANKED_ARM)
+
+# Permute the first 20 fused results, leave the tail in fused order. This is the
+# production-safe shape: the refusal gate reads semantic_rank == 1 from the full
+# k=40 list, so nothing may be dropped, and a window keeps the cross-encoder's
+# cost bounded at 20 forward passes per query rather than 40.
+RERANK_WINDOW = 20
 
 # Experiment indexes live here, never at settings.bm25_path. Gitignored.
 EXPERIMENT_DIR = RETRIEVAL_OUTPUT_DIR / "experiments"
@@ -80,6 +88,29 @@ def compare(baseline: ArmResult, candidate: ArmResult) -> ArmDelta:
     )
 
 
+class LatencyRecordingReranker:
+    """Wraps a RerankerPort and records wall-clock per rerank() call. The audit's
+    stated unknown for this arm is latency, not recall — an arm reported without
+    it cannot answer the only question a deploy would ask."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.latencies_ms: list[float] = []
+
+    def rerank(self, query: str, candidates: Sequence[tuple[str, str]]) -> list[tuple[str, float]]:
+        started = time.perf_counter()
+        try:
+            return list(self._inner.rerank(query, candidates))
+        finally:
+            self.latencies_ms.append((time.perf_counter() - started) * 1000.0)
+
+
+def _flag_reranker() -> Any:
+    from src.adapters.secondary.reranker.flag_reranker import FlagReranker
+
+    return FlagReranker()
+
+
 def _snowball_index() -> Any:
     try:
         from src.adapters.secondary.lexical.snowball_bm25_index import SnowballBm25Index
@@ -110,6 +141,16 @@ def build_arm(
     )
     if arm == BASELINE_ARM:
         return base
+    if arm == RERANKED_ARM:
+        # Both channels are the baseline's own, untouched: the reranker is the
+        # only variable, so any delta is attributable to it.
+        return HybridRetriever(
+            base._vector_store,
+            base._lexical_index,
+            expansion_mode="off",
+            reranker=LatencyRecordingReranker(_flag_reranker()),
+            rerank_window=RERANK_WINDOW,
+        )
     lexical = NullLexicalIndex() if arm == "semantic_only" else _snowball_index()
     # Reaching into the built retriever's vector store is deliberate and scoped
     # to offline evaluation: the arms must share ONE vector channel so the only
@@ -149,7 +190,18 @@ GATES: tuple[tuple[str, Callable[[ArmResult], bool]], ...] = (
 )
 
 
-def render_report(results: dict[str, ArmResult], version: str, index_profile: str) -> str:
+def _percentile(values: Sequence[float], fraction: float) -> float:
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, int(round(fraction * (len(ordered) - 1))))
+    return ordered[index]
+
+
+def render_report(
+    results: dict[str, ArmResult],
+    version: str,
+    index_profile: str,
+    rerank_latencies_ms: Optional[Sequence[float]] = None,
+) -> str:
     baseline = results[BASELINE_ARM]
     lines = [
         "# Retrieval channel ablation",
@@ -177,6 +229,24 @@ def render_report(results: dict[str, ArmResult], version: str, index_profile: st
         delta = compare(baseline, result)
         zero_new = "PASS" if not delta.new_misses else f"FAIL ({len(delta.new_misses)})"
         lines.append(f"- `{arm}` — " + "; ".join(verdicts) + f"; zero new misses: {zero_new}")
+
+    if rerank_latencies_ms:
+        lines += [
+            "",
+            "## Reranker latency",
+            "",
+            f"Measured over {len(rerank_latencies_ms)} rerank calls, one per question, "
+            f"{RERANK_WINDOW} candidates each. Wall-clock inside `rerank()` only — it excludes "
+            "retrieval and the one-off model load.",
+            "",
+            f"- p50: {_percentile(rerank_latencies_ms, 0.50):.1f} ms",
+            f"- p95: {_percentile(rerank_latencies_ms, 0.95):.1f} ms",
+            f"- max: {max(rerank_latencies_ms):.1f} ms",
+            "",
+            "This is a local CPU measurement on the developer machine, not the deploy target. "
+            "It bounds the shape of the cost, not the number the Space would show.",
+            "",
+        ]
 
     lines += ["", "## Per-question deltas vs the current hybrid baseline", ""]
     for arm, result in results.items():
@@ -219,9 +289,11 @@ def render_report(results: dict[str, ArmResult], version: str, index_profile: st
                 "This is a measurement, not a decision. Removing or down-weighting the lexical "
                 "channel is a separate owner call, and one evaluation set of 80 answerable "
                 "questions over a 14-document corpus is thin evidence for a permanent "
-                "architectural change. The obvious confounder to rule out first is RRF's "
-                "rank-only fusion (k=60): it weights a BM25 rank-1 hit identically however weak "
-                "its score is, so a near-miss lexical match can outrank a strong semantic one.",
+                "architectural change. Rule out the fusion parameters first: at k=60 over 20 "
+                "candidates, RRF's rank curve spans only 1/61..1/80 (1.31x) while appearing in "
+                "BOTH rankings is worth roughly 2x, so a shared-but-mediocre chunk outranks a "
+                "semantic rank-1 the lexical channel missed. Run "
+                "`python -m src.features.evaluation.fusion_sweep` to separate the two.",
                 "",
             ]
         else:
@@ -245,9 +317,13 @@ def run(
     questions = [q for q in data["questions"] if q["answerable"]]
 
     results: dict[str, ArmResult] = {}
+    rerank_latencies_ms: list[float] = []
     for arm in arms:
         retriever = build_arm(arm, index_profile=index_profile)
         results[arm] = score_arm(arm, retriever, questions)
+        reranker = getattr(retriever, "_reranker", None)
+        if isinstance(reranker, LatencyRecordingReranker):
+            rerank_latencies_ms = list(reranker.latencies_ms)
         print(
             f"{arm}: Recall@5={results[arm].recall_at_5:.3f} "
             f"(en={results[arm].recall_for('en'):.3f}, es={results[arm].recall_for('es'):.3f}) "
@@ -255,7 +331,9 @@ def run(
         )
 
     header = artifacts.resolve_provenance(index_profile, "off")
-    report = header.render() + "\n\n" + render_report(results, data["version"], index_profile)
+    report = header.render() + "\n\n" + render_report(
+        results, data["version"], index_profile, rerank_latencies_ms
+    )
 
     path = out_path or (EVAL_REPORTS_DIR / f"ablation_v{data['version']}__{index_profile}__off.md")
     path.parent.mkdir(parents=True, exist_ok=True)
