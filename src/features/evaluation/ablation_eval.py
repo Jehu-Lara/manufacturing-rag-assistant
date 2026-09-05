@@ -231,17 +231,23 @@ def render_report(
         lines.append(f"- `{arm}` — " + "; ".join(verdicts) + f"; zero new misses: {zero_new}")
 
     if rerank_latencies_ms:
+        # FlagReranker loads its weights inside the FIRST rerank(), so sample 0
+        # carries a one-off ~2.3GB model load. Reporting it inside the
+        # percentiles would overstate the steady-state per-query cost, so it is
+        # split out and named rather than quietly dropped.
+        cold, warm = rerank_latencies_ms[0], (rerank_latencies_ms[1:] or rerank_latencies_ms)
         lines += [
             "",
             "## Reranker latency",
             "",
-            f"Measured over {len(rerank_latencies_ms)} rerank calls, one per question, "
-            f"{RERANK_WINDOW} candidates each. Wall-clock inside `rerank()` only — it excludes "
-            "retrieval and the one-off model load.",
+            f"Wall-clock inside `rerank()` only, {RERANK_WINDOW} candidates per call, one call per "
+            f"question. Retrieval is excluded. The percentiles cover the {len(warm)} warm calls; "
+            "the first call is reported separately because it also pays the one-off model load.",
             "",
-            f"- p50: {_percentile(rerank_latencies_ms, 0.50):.1f} ms",
-            f"- p95: {_percentile(rerank_latencies_ms, 0.95):.1f} ms",
-            f"- max: {max(rerank_latencies_ms):.1f} ms",
+            f"- p50: {_percentile(warm, 0.50):.1f} ms",
+            f"- p95: {_percentile(warm, 0.95):.1f} ms",
+            f"- max: {max(warm):.1f} ms",
+            f"- first (cold, includes the model load): {cold:.1f} ms",
             "",
             "This is a local CPU measurement on the developer machine, not the deploy target. "
             "It bounds the shape of the cost, not the number the Space would show.",
