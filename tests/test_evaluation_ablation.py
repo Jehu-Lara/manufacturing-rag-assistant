@@ -217,3 +217,34 @@ def test_report_states_measured_rerank_latency_when_present() -> None:
 
     assert "p50" in report and "p95" in report
     assert "ms" in report
+
+
+def test_latency_report_excludes_the_first_call_from_the_percentiles() -> None:
+    """FlagReranker loads its weights inside the first rerank(), so sample 0
+    carries a one-off ~2.3GB model load. Reporting it as a query latency
+    overstates the steady-state cost, and claiming the load is excluded when it
+    is not would be worse — the report has to be true about which samples it
+    used."""
+    results = {
+        ablation_eval.BASELINE_ARM: _arm(ablation_eval.BASELINE_ARM, {"q1": True}),
+        ablation_eval.RERANKED_ARM: _arm(ablation_eval.RERANKED_ARM, {"q1": True}),
+    }
+
+    report = ablation_eval.render_report(
+        results, "1.1.0", "contextual-v1", rerank_latencies_ms=[9999.0, 10.0, 20.0, 30.0]
+    )
+
+    assert "p50: 20.0 ms" in report
+    assert "9999" in report
+    assert "cold" in report.lower()
+
+
+def test_latency_report_survives_a_single_sample() -> None:
+    results = {
+        ablation_eval.BASELINE_ARM: _arm(ablation_eval.BASELINE_ARM, {"q1": True}),
+        ablation_eval.RERANKED_ARM: _arm(ablation_eval.RERANKED_ARM, {"q1": True}),
+    }
+
+    report = ablation_eval.render_report(results, "1.1.0", "contextual-v1", rerank_latencies_ms=[42.0])
+
+    assert "42.0 ms" in report
