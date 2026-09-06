@@ -100,7 +100,11 @@ def fuse_rankings(
 
 
 def is_confident(top1_semantic_score: Optional[float], threshold: float) -> bool:
-    return top1_semantic_score is not None and top1_semantic_score >= threshold
+    return (
+        top1_semantic_score is not None
+        and math.isfinite(top1_semantic_score)
+        and top1_semantic_score >= threshold
+    )
 
 
 def top1_semantic_score_from_results(results: Sequence[RetrievalResult]) -> Optional[float]:
@@ -145,10 +149,14 @@ class RefusalPolicy:
         self._review_floor = review_floor
 
     def top1_semantic_score(self, results: Sequence[RetrievalResult]) -> Optional[float]:
-        return top1_semantic_score_from_results(results)
+        """A non-finite selected score is treated as absent, not as evidence:
+        NaN passes neither band comparison and +inf passes both, so without
+        this the gate would read a malformed score as maximum confidence."""
+        score = top1_semantic_score_from_results(results)
+        return score if score is not None and math.isfinite(score) else None
 
     def classify_score(self, score: Optional[float]) -> GateBand:
-        if score is None:
+        if score is None or not math.isfinite(score):
             return "hard_refuse"
         if self._mode == "binary":
             return "confident" if score >= self._threshold else "hard_refuse"
