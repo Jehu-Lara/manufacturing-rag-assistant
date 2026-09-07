@@ -12,7 +12,7 @@ license: mit
 
 A bilingual (English/Spanish), citation-mandatory Retrieval-Augmented Generation assistant over manufacturing SOPs, equipment manuals, and quality/safety procedures — built to demonstrate applied AI on industrial data with real, inspectable evidence, not a generic "chat with your PDF" demo.
 
-**This is a static showcase page, not the live app.** The live demo link below will be filled in once deployment completes (see status note on the page).
+**This is a static showcase page, not the live app.** Try the separate [live interactive demo](https://jehulara-manufacturing-rag-assistant-live.hf.space) or inspect its [Hugging Face Space card](https://huggingface.co/spaces/JehuLara/manufacturing-rag-assistant-live). The deployment is a public functional portfolio demo, not a production or client system.
 
 ## What makes this different
 
